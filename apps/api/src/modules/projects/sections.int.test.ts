@@ -357,6 +357,13 @@ describe('project workspace sections (Step 2.7)', () => {
     await api.projects.updateInstallation({ id: projectId, values: { status: 'In Progress' } });
     expect(await status()).toEqual({ project: 'Active', installation: 'In Progress' });
 
+    // Pending is an option (seeded) and keeps the project Active.
+    expect(
+      (await api.optionLists.options({ keys: ['installationStatuses'] })).installationStatuses?.[0],
+    ).toMatchObject({ value: 'Pending' });
+    await api.projects.updateInstallation({ id: projectId, values: { status: 'Pending' } });
+    expect(await status()).toEqual({ project: 'Active', installation: 'Pending' });
+
     await api.projects.updateInstallation({
       id: projectId,
       values: { status: 'Installation Completed' },

@@ -2,7 +2,12 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RouterOutputs } from '../../lib/trpc.ts';
 import { fakeAuth, fullAccessProfile, renderPage, type TrpcCall } from '../../test/render.tsx';
-import { EbVerificationCard, GridApplicationCard, StcClaimCard } from './ProjectWorkflow.tsx';
+import {
+  EbVerificationCard,
+  GridApplicationCard,
+  InstallationCard,
+  StcClaimCard,
+} from './ProjectWorkflow.tsx';
 
 type Project = RouterOutputs['projects']['get'];
 
@@ -107,6 +112,33 @@ describe('project workflow cards', () => {
         id,
         values: { status: 'Grid App Approved', approvalDate: '2026-10-15', applicationRef: 'AG-1' },
       });
+    });
+  });
+
+  it('installation details: the status offers Pending and says it is linked to the project status', async () => {
+    renderPage(<InstallationCard editable project={project({ installation: null })} />, {
+      path: '/projects',
+      auth: signedIn(),
+      responses: {
+        'optionLists.options': {
+          installationStatuses: [
+            { value: 'Pending', label: 'Pending' },
+            { value: 'Unscheduled', label: 'Unscheduled' },
+          ],
+          installationDocsStatuses: [],
+        },
+        'projects.installers': [],
+        'users.options': [],
+      },
+    });
+    expect(await screen.findByText('Installation details')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Linked to Project Status')).toBeDefined();
+    expect(within(dialog).getByText('Installation documents')).toBeDefined();
+    // The picker's hidden native select carries the options.
+    await waitFor(() => {
+      expect(dialog.querySelector('option[value="Pending"]')).not.toBeNull();
     });
   });
 

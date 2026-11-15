@@ -183,6 +183,13 @@
       "when": 1794772015081,
       "tag": "0025_stc_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794782861095,
+      "tag": "0026_add_pending_installation_status",
+      "breakpoints": true
     }
   ]
 }

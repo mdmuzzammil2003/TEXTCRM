@@ -5,8 +5,26 @@ import {
   financeSchema,
   gridApplicationSchema,
   gridTiming,
+  projectStatusForInstallation,
   stcTotals,
 } from './project-sections.ts';
+import { optionProtection } from './admin.ts';
+
+describe('projectStatusForInstallation', () => {
+  it('Pending and the other open statuses mean Active; the finished ones map across', () => {
+    for (const status of ['Pending', 'Unscheduled', 'Booked / Scheduled', 'In Progress', null]) {
+      expect(projectStatusForInstallation(status)).toBe('Active');
+    }
+    expect(projectStatusForInstallation('Installation Completed')).toBe('Completed');
+    expect(projectStatusForInstallation('Complete')).toBe('Completed');
+    expect(projectStatusForInstallation('Closed')).toBe('Closed');
+    expect(projectStatusForInstallation('Cancelled')).toBe('Lost');
+  });
+
+  it('Pending is protected from archiving', () => {
+    expect(optionProtection('installationStatuses', 'Pending')).toBe('protected');
+  });
+});
 
 describe('ebCheckResults', () => {
   it('passes the accepted answers and compares the meter phase with the site', () => {

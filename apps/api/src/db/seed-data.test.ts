@@ -36,6 +36,15 @@ describe('buildOptionLists', () => {
     ]);
   });
 
+  it('adds Pending first to the installation statuses', () => {
+    const [list] = buildOptionLists({ installationStatuses: ['Unscheduled', 'Cancelled'] });
+    expect(list?.options).toEqual([
+      { value: 'Pending', label: 'Pending', sortOrder: 5 },
+      { value: 'Unscheduled', label: 'Unscheduled', sortOrder: 10 },
+      { value: 'Cancelled', label: 'Cancelled', sortOrder: 20 },
+    ]);
+  });
+
   it('rejects a malformed file', () => {
     expect(() => buildOptionLists({ phases: 'Single Phase' })).toThrow();
   });

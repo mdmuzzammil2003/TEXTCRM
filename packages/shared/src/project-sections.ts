@@ -317,7 +317,8 @@ export type InstallationValues = z.output<typeof installationSchema>;
 
 /**
  * Installation status <-> project status, kept in step both ways by a database trigger
- * (migration 0023): the project status an installation status means.
+ * (migration 0023): the project status an installation status means. "Pending", "Unscheduled"
+ * and the other in-progress statuses all mean Active.
  */
 export function projectStatusForInstallation(status: string | null): string {
   if (status === 'Installation Completed' || status === 'Complete') return 'Completed';

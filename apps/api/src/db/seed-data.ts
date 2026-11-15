@@ -73,6 +73,14 @@ export function listNameFromKey(key: string): string {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
+/** Options the CRM adds to the legacy lists, with their place (legacy ones are 10, 20, …). */
+export const EXTRA_OPTIONS: Readonly<
+  Record<string, readonly { value: string; sortOrder: number }[]>
+> = {
+  // Before "Unscheduled"; means the project is Active (migration 0026 adds it to live data).
+  installationStatuses: [{ value: 'Pending', sortOrder: 5 }],
+};
+
 export function buildOptionLists(raw: unknown): OptionListSeed[] {
   const parsed = dropdownFileSchema.parse(raw);
   // The old "platforms" list is part of Lead Source now: its choices follow the source choices.
@@ -82,10 +90,16 @@ export function buildOptionLists(raw: unknown): OptionListSeed[] {
     .filter(([key]) => !SKIPPED_OPTION_LISTS.has(key))
     .map(([key, values]) => {
       const unique = [...new Set(values.map((v) => v.trim()).filter((v) => v.length > 0))];
+      const extra = (EXTRA_OPTIONS[key] ?? [])
+        .filter((option) => !unique.includes(option.value))
+        .map((option) => ({ ...option, label: option.value }));
       return {
         key,
         name: listNameFromKey(key),
-        options: unique.map((value, i) => ({ value, label: value, sortOrder: (i + 1) * 10 })),
+        options: [
+          ...extra,
+          ...unique.map((value, i) => ({ value, label: value, sortOrder: (i + 1) * 10 })),
+        ].sort((a, b) => a.sortOrder - b.sortOrder),
       };
     });
 }

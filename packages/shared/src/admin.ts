@@ -226,6 +226,7 @@ export const PROTECTED_OPTION_VALUES: Readonly<Record<string, readonly string[]>
   gridApplicationStatuses: ['Grid App Approved', 'Grid Rejected'],
   // Linked to the project status by a database trigger.
   installationStatuses: [
+    'Pending',
     'Unscheduled',
     'Installation Completed',
     'Complete',
