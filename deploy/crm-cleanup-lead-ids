@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# One-off clean-up on the production VPS: delete leads without a Lead ID and projects whose lead
+# has none (see apps/api/src/db/cleanup-missing-lead-ids.ts). Installed at
+# /usr/local/bin/crm-cleanup-lead-ids. Run it after the deploy that added the Lead ID rule.
+#
+#   crm-cleanup-lead-ids                       list what would be deleted; changes nothing
+#   crm-cleanup-lead-ids --commit <fingerprint>  back up the database, then delete exactly that list
+set -euo pipefail
+
+APP=/opt/mmscrm
+run() {
+  docker compose -p mmscrm-prod -f "$APP/docker-compose.prod.yml" --project-directory "$APP" \
+    run --rm --no-deps -T migrate node src/db/cleanup-missing-lead-ids.ts "$@"
+}
+
+case "${1:-}" in
+  '')
+    run
+    ;;
+  --commit)
+    [ -n "${2:-}" ] || { echo "usage: crm-cleanup-lead-ids --commit <fingerprint shown by the list>"; exit 1; }
+    echo "== database backup first"
+    /usr/local/bin/crm-backup
+    echo "== deleting"
+    run --commit --expect "$2"
+    ;;
+  *)
+    echo "usage: crm-cleanup-lead-ids [--commit <fingerprint>]"
+    exit 1
+    ;;
+esac
