@@ -4,46 +4,120 @@
 # GitHub Actions pipes `git archive HEAD` into this script over SSH. The deploy key is locked to this
 # command in /root/.ssh/authorized_keys, so it can do nothing else on the server.
 #
-# Steps: take the lock -> save the tarball -> back up the database -> sync the code into /opt/mmscrm
-# (never touching .env) -> rebuild and restart (the `migrate` service runs pending migrations first)
-# -> wait for /api/health -> report.
+# Phases (the site stays up until phase 3):
+#   1. receive + check the release
+#   2. tag the running images :prev, copy the running code to /opt/mmscrm.prev, sync the new code in,
+#      build the new images                                         -- old containers keep serving
+#   3. stop api + worker, take a backup (no writes can slip in after it), run the migrations on their
+#      own. Drizzle runs every pending migration in ONE transaction: a failure changes nothing.
+#      Migration failed -> put the old code + images back, start them, exit.
+#   4. start the new api / worker / web, wait for health.
+#      Unhealthy -> stop them, restore the database from the phase-3 backup (only if this deploy changed
+#      the schema), put the old code + images back, start them, exit.
+# The database is never restored after a deploy that reported "deploy ok".
 set -euo pipefail
 
 APP=/opt/mmscrm
 PREV=/opt/mmscrm.prev
+BACKUPS=/srv/crm-backups
+PROJECT=mmscrm-prod
+IMAGES="api worker migrate web"
+PG=mmscrm-prod-postgres-1
+HEALTH_TRIES=30 # x 3 s = 90 s
 STAGE=$(mktemp -d /tmp/crm-deploy.XXXXXX)
 trap 'rm -rf "$STAGE"' EXIT
+
+dc() { docker compose -p "$PROJECT" -f "$APP/docker-compose.prod.yml" --project-directory "$APP" "$@"; }
+log() { echo "[$(date -u +%H:%M:%S)] $*"; }
+applied() { docker exec "$PG" psql -U crm -d crm -tAc 'select count(*) from drizzle.__drizzle_migrations'; }
+
+healthy() {
+  local running
+  running=$(dc ps --status running --services)
+  for s in api worker web; do grep -qx "$s" <<<"$running" || return 1; done
+  dc exec -T api node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null
+}
+
+wait_healthy() {
+  for i in $(seq 1 "$HEALTH_TRIES"); do
+    if healthy; then log "healthy after ~$((i * 3)) s"; return 0; fi
+    sleep 3
+  done
+  return 1
+}
+
+restore_code_and_images() {
+  log "restoring previous code and images"
+  rsync -a --delete --exclude .env --exclude legacy-reference "$PREV"/ "$APP"/
+  for s in $IMAGES; do docker tag "$PROJECT-$s:prev" "$PROJECT-$s:latest"; done
+}
+
+start_old() {
+  dc up -d --no-build --no-deps api worker web
+  if wait_healthy; then log "previous version is running again"; else log "previous version is NOT healthy — check by hand"; fi
+}
+
+restore_database() {
+  log "restoring database from $BACKUP"
+  docker exec "$PG" psql -U crm -d postgres -v ON_ERROR_STOP=1 \
+    -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'crm' and pid <> pg_backend_pid()" \
+    -c 'drop database crm' -c 'create database crm'
+  gunzip -c "$BACKUP" | docker exec -i "$PG" psql -U crm -d crm -v ON_ERROR_STOP=1 -q >/dev/null
+  log "database restored ($(applied) migrations recorded)"
+}
 
 exec 9>/var/lock/crm-deploy.lock
 flock -n 9 || { echo "another deploy is running"; exit 1; }
 
-echo "== receiving release"
+# ---- 1. receive -------------------------------------------------------------------------------
+log "== 1/4 receiving release ${SSH_ORIGINAL_COMMAND:-}"
 tar -x -C "$STAGE"
 [ -f "$STAGE/docker-compose.prod.yml" ] || { echo "release is missing docker-compose.prod.yml"; exit 1; }
-echo "release: ${CRM_RELEASE:-${SSH_ORIGINAL_COMMAND:-unknown}}"
+[ -f "$APP/.env" ] || { echo "$APP/.env is missing"; exit 1; }
+# `ssh ... dry-run` checks the key, the lock and the release, then stops before changing anything.
+case "${SSH_ORIGINAL_COMMAND:-}" in *dry-run*) log "dry run: release looks valid, nothing changed"; exit 0 ;; esac
 
-echo "== database backup"
-/usr/local/bin/crm-backup
-
-echo "== syncing code"
+# ---- 2. build (site still up) -------------------------------------------------------------------
+log "== 2/4 build (site still up)"
+for s in $IMAGES; do docker tag "$PROJECT-$s:latest" "$PROJECT-$s:prev"; done
 rm -rf "$PREV"; mkdir -p "$PREV"
 rsync -a --exclude .env "$APP"/ "$PREV"/
 rsync -a --delete --exclude .env --exclude legacy-reference "$STAGE"/ "$APP"/
+if ! dc build; then
+  log "build failed — nothing was stopped"
+  restore_code_and_images
+  exit 1
+fi
 
-echo "== build + restart"
-cd "$APP"
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+# ---- 3. migrate (downtime starts) ---------------------------------------------------------------
+log "== 3/4 downtime starts: stopping api + worker, backing up, migrating"
+BEFORE=$(applied)
+dc stop api worker
+BACKUP=$(/usr/local/bin/crm-backup | sed -n 's/.*backup ok: \([^ ]*\).*/\1/p') || BACKUP=
+[ -f "$BACKUP" ] || { log "backup failed — starting the old version again"; restore_code_and_images; start_old; exit 1; }
+log "backup: $BACKUP"
+if ! dc run --rm --no-deps migrate; then
+  log "MIGRATION FAILED — the transaction rolled back, schema unchanged ($(applied) migrations)"
+  restore_code_and_images
+  start_old
+  exit 1
+fi
+AFTER=$(applied)
+log "migrations: $BEFORE -> $AFTER"
 
-echo "== waiting for health"
-for i in $(seq 1 30); do
-  if docker compose -f docker-compose.prod.yml exec -T api node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-    echo "healthy after ~$((i*3))s"
-    docker image prune -f >/dev/null
-    echo "== deploy ok"
-    exit 0
-  fi
-  sleep 3
-done
-echo "== API did not become healthy; previous code is in $PREV"
-docker compose -f docker-compose.prod.yml logs --tail 40 migrate api
+# ---- 4. start + health --------------------------------------------------------------------------
+log "== 4/4 starting the new version"
+dc up -d --no-build --no-deps --remove-orphans api worker web
+if wait_healthy; then
+  docker image prune -f >/dev/null
+  log "== deploy ok — downtime ended"
+  exit 0
+fi
+
+log "NEW VERSION UNHEALTHY — rolling back"
+dc logs --tail 40 api worker || true
+dc stop api worker
+if [ "$AFTER" != "$BEFORE" ]; then restore_database || log "DATABASE RESTORE FAILED — restore $BACKUP by hand"; fi
+restore_code_and_images
+start_old
 exit 1
