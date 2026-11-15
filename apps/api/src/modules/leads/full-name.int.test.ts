@@ -100,6 +100,7 @@ describe('leads.full_name (generated column)', () => {
 
 function leadRowInput() {
   return {
+    leadRef: null,
     firstName: 'Olivia',
     lastName: 'Nguyen',
     email: null,

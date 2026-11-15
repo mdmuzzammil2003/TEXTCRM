@@ -37,6 +37,7 @@ describe('project workspace sections (Step 2.7)', () => {
     const api = as();
     const { id: leadId } = await api.leads.create({
       values: {
+        leadRef: '7628533',
         firstName: 'Olivia',
         lastName: 'Nguyen',
         mobile: '0412 345 678',

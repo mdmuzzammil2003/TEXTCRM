@@ -126,7 +126,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     return result;
   };
   const leadById = async (sheetLeadId: string) =>
-    (await db.select().from(leads).where(eq(leads.sheetLeadId, sheetLeadId)))[0];
+    (await db.select().from(leads).where(eq(leads.leadRef, sheetLeadId)))[0];
   const allLeads = () => db.select().from(leads);
   const rowErrors = async (runId: string) => as().sheetSync.runErrors({ runId });
 
@@ -261,7 +261,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
         message: 'No Lead ID — skipped. Give the row a Lead ID and it is picked up next run.',
       },
     ]);
-    expect(await db.select().from(leads).where(isNull(leads.sheetLeadId))).toHaveLength(0);
+    expect(await db.select().from(leads).where(isNull(leads.leadRef))).toHaveLength(0);
   });
 
   it('rule 6: every run is logged with its counts and per-row errors', async () => {
@@ -328,6 +328,54 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     expect(run).toMatchObject({ createdCount: 0, errorCount: 1 });
     expect((await rowErrors(run.runId))[0]?.message).toContain('Same customer as Lead ID L-1');
     expect(await allLeads()).toHaveLength(2);
+  });
+
+  it('Lead IDs are unique across the CRM: one typed in joins the sheet; a deleted one is reported', async () => {
+    // Jack was typed in with his OpenSolar ID before the sheet had him: same ID, same lead.
+    const { id: typedIn } = await as().leads.create({
+      values: {
+        leadRef: 'L-2',
+        firstName: 'Jack',
+        lastName: 'Smyth',
+        email: 'jack.other@example.com',
+      },
+    });
+    // Someone else's lead holds L-1 but was deleted.
+    const { id: deleted } = await as().leads.create({
+      values: { leadRef: 'L-1', firstName: 'Old', lastName: 'Entry', email: 'old@example.com' },
+    });
+    await as().leads.remove({ id: deleted });
+
+    const run = await sync();
+    expect(run).toMatchObject({ createdCount: 0, linkedCount: 1, errorCount: 1 });
+    expect(await allLeads()).toHaveLength(2);
+    // Linked by the ID, but the CRM still owns it: the sheet doesn't overwrite the name.
+    expect(await leadById('L-2')).toMatchObject({
+      id: typedIn,
+      sheetSourceId: sourceId,
+      lastName: 'Smyth',
+    });
+    const messages = (await rowErrors(run.runId)).map((row) => row.message);
+    expect(messages).toContainEqual(
+      expect.stringContaining('belongs to Old Entry, a deleted lead'),
+    );
+    expect(messages).toContainEqual(expect.stringContaining('already in the CRM with Lead ID L-2'));
+  });
+
+  it('rule 7 never replaces a Lead ID: the same customer with another ID is flagged', async () => {
+    await as().leads.create({
+      values: {
+        leadRef: '7628533',
+        firstName: 'Olivia',
+        lastName: 'Nguyen',
+        email: 'olivia@example.com',
+      },
+    });
+    rows = [OLIVIA];
+    const run = await sync();
+    expect(run).toMatchObject({ createdCount: 0, linkedCount: 0, errorCount: 1 });
+    expect((await rowErrors(run.runId))[0]?.message).toContain('already has Lead ID 7628533');
+    expect(await leadById('7628533')).toMatchObject({ sheetSourceId: null });
   });
 
   it('the schedule syncs enabled sheets only', async () => {

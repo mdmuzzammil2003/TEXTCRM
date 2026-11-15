@@ -4,6 +4,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, FolderKanban, UserRoundPlus, UserRoundCheck } from 'lucide-react';
 import { useState } from 'react';
 import { DetailList } from '../../components/DetailList.tsx';
+import { LeadIdLink } from '../../components/LeadIdLink.tsx';
 import { errorMessage } from '../../lib/errors.ts';
 import { useCan } from '../../lib/hooks.ts';
 import { useTRPC } from '../../lib/trpc.ts';
@@ -16,6 +17,7 @@ import {
   DialogFooter,
   Skeleton,
   toast,
+  Tooltip,
 } from '../../ui/index.ts';
 
 function Preview({ leadId, onDone }: { leadId: string; onDone: () => void }) {
@@ -31,7 +33,7 @@ function Preview({ leadId, onDone }: { leadId: string; onDone: () => void }) {
     try {
       const project = await convert.mutateAsync({ leadId });
       await queryClient.invalidateQueries();
-      toast({ title: `Project ${project.projectNumber} created`, tone: 'success' });
+      toast({ title: `Project ${project.projectRef ?? ''} created`, tone: 'success' });
       onDone();
       void navigate({ to: '/projects/$projectId', params: { projectId: project.id } });
     } catch (caught) {
@@ -95,6 +97,10 @@ function Preview({ leadId, onDone }: { leadId: string; onDone: () => void }) {
               </p>
               <DetailList
                 items={[
+                  {
+                    label: 'Project ID',
+                    value: <LeadIdLink value={project.projectRef} label="Project ID" />,
+                  },
                   { label: 'Site', value: project.address },
                   { label: 'Stage', value: project.stage },
                   { label: 'Sales person', value: project.salesPerson ?? 'Unassigned' },
@@ -143,21 +149,39 @@ function Preview({ leadId, onDone }: { leadId: string; onDone: () => void }) {
 }
 
 /** "Convert to project" button + confirmation showing exactly what will be created. */
-export function ConvertToProjectButton({ leadId }: { leadId: string }) {
+export function ConvertToProjectButton({
+  leadId,
+  hasLeadRef = true,
+}: {
+  leadId: string;
+  /** Without a Lead ID there is no Project ID, so the button is off (the API refuses too). */
+  hasLeadRef?: boolean;
+}) {
   const can = useCan();
   const [open, setOpen] = useState(false);
   if (!can('projects', 'create') || !can('leads', 'edit')) return null;
+  const button = (
+    <Button
+      variant="primary"
+      disabled={!hasLeadRef}
+      onClick={() => {
+        setOpen(true);
+      }}
+    >
+      <FolderKanban />
+      Convert to project
+    </Button>
+  );
   return (
     <>
-      <Button
-        variant="primary"
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        <FolderKanban />
-        Convert to project
-      </Button>
+      {hasLeadRef ? (
+        button
+      ) : (
+        <Tooltip content="Add a Lead ID first (Edit) — it becomes the Project ID.">
+          {/* A disabled button gets no pointer events; the wrapper shows the reason. */}
+          <span tabIndex={0}>{button}</span>
+        </Tooltip>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           title="Convert to project"
@@ -179,10 +203,19 @@ export function ConvertToProjectButton({ leadId }: { leadId: string }) {
 }
 
 /** Shown on a converted lead: where the job went. */
-export function ConvertedNotice({ project }: { project: { id: string; projectNumber: string } }) {
+export function ConvertedNotice({
+  project,
+}: {
+  project: { id: string; projectRef: string | null };
+}) {
   const can = useCan();
   return (
-    <Alert tone="success" title={`Converted to project ${project.projectNumber}`}>
+    <Alert
+      tone="success"
+      title={
+        project.projectRef ? `Converted to project ${project.projectRef}` : 'Converted to a project'
+      }
+    >
       This lead is now a job. Its status is locked.{' '}
       {can('projects', 'view') && (
         <Link

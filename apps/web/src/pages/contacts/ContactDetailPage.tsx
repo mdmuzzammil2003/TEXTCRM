@@ -30,6 +30,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { DetailList } from '../../components/DetailList.tsx';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
 import { HistoryList } from '../../components/HistoryList.tsx';
+import { OpenSolarIcon } from '../../components/LeadIdLink.tsx';
 import { errorMessage } from '../../lib/errors.ts';
 import { formatDate, fullName } from '../../lib/format.ts';
 import { useCan } from '../../lib/hooks.ts';
@@ -265,14 +266,17 @@ function ContactView({ contact }: { contact: Contact }) {
           items={contact.projects.map((project) => ({
             id: project.id,
             title: (
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId: project.id }}
-                className="hover:text-accent-text hover:underline"
-              >
-                {project.projectNumber}
-                {project.title ? ` · ${project.title}` : ''}
-              </Link>
+              <span className="inline-flex items-center gap-1.5">
+                <Link
+                  to="/projects/$projectId"
+                  params={{ projectId: project.id }}
+                  className="hover:text-accent-text hover:underline"
+                >
+                  {project.projectRef ?? 'Project'}
+                  {project.title ? ` · ${project.title}` : ''}
+                </Link>
+                <OpenSolarIcon value={project.projectRef} />
+              </span>
             ),
             meta: project.stage,
             badge: project.status,

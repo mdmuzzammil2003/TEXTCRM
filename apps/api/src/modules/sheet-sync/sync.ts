@@ -23,6 +23,7 @@ import {
   type Origin,
 } from '../imports/records.ts';
 import { findDuplicate } from '../leads/router.ts';
+import { leadWithRef } from '../leads/lead-ref.ts';
 
 // The live leads sync (Step 3.3), exactly per §1.8 — "the Sheet creates, the CRM owns after":
 //  1. a row with a new Lead ID creates a lead;
@@ -90,7 +91,7 @@ async function leadForSheetId(db: Db, sourceId: string, sheetLeadId: string) {
   const [lead] = await db
     .select()
     .from(leads)
-    .where(and(eq(leads.sheetSourceId, sourceId), eq(leads.sheetLeadId, sheetLeadId)))
+    .where(and(eq(leads.sheetSourceId, sourceId), eq(leads.leadRef, sheetLeadId)))
     .limit(1);
   return lead ?? null;
 }
@@ -223,16 +224,66 @@ export async function syncSheetSource(
           continue;
         }
 
+        // Lead IDs are unique across the CRM. One already on a lead typed in or imported is the
+        // same lead: it joins this sheet (the CRM still owns it, so the sheet doesn't change it).
+        const holder = await leadWithRef(db, sheetLeadId);
+        if (holder) {
+          if (holder.sheetSourceId === null && holder.deletedAt === null) {
+            const linked = await db.transaction(async (tx) => {
+              const updated = await tx
+                .update(leads)
+                .set({ sheetSourceId: source.id })
+                .where(and(eq(leads.id, holder.id), isNull(leads.sheetSourceId)))
+                .returning({ id: leads.id });
+              if (updated.length === 0) return false;
+              await logSystemActivity(tx, {
+                entityType: 'lead',
+                entityId: holder.id,
+                authorUserId: null,
+                subject: `Linked to the ${sourceLabel} by its Lead ID ${sheetLeadId}`,
+                metadata: { sheetLeadId, sourceId: source.id },
+              });
+              await recordAudit(tx, ACTOR, {
+                action: 'sheet_link',
+                entityType: 'lead',
+                entityId: holder.id,
+                before: { sheetSourceId: null },
+                after: { sheetSourceId: source.id },
+              });
+              return true;
+            });
+            if (linked) {
+              counts.linkedCount += 1;
+              notes.push({
+                rowNumber: row.rowNumber,
+                sheetLeadId,
+                message: `Linked to ${nameOf(holder)}, already in the CRM with Lead ID ${sheetLeadId}.`,
+              });
+              continue;
+            }
+          }
+          fail(
+            row.rowNumber,
+            sheetLeadId,
+            holder.deletedAt
+              ? `Lead ID ${sheetLeadId} belongs to ${nameOf(holder)}, a deleted lead — not imported. Restore that lead or give the row another Lead ID.`
+              : `Lead ID ${sheetLeadId} already belongs to ${nameOf(holder)} from another sheet — not imported. Give the row another Lead ID.`,
+          );
+          continue;
+        }
+
         // Rule 7: a new Lead ID that is someone already in the CRM is linked, not created.
         const duplicate = await findDuplicate(db, record.lead);
         if (duplicate) {
           const [match] = await db.select().from(leads).where(eq(leads.id, duplicate.lead.id));
-          if (match && match.sheetSourceId === null) {
+          if (match && match.sheetSourceId === null && !match.leadRef && !match.convertedAt) {
             const linked = await db.transaction(async (tx) => {
               const updated = await tx
                 .update(leads)
-                .set({ sheetSourceId: source.id, sheetLeadId })
-                .where(and(eq(leads.id, match.id), isNull(leads.sheetSourceId)))
+                .set({ sheetSourceId: source.id, leadRef: sheetLeadId })
+                .where(
+                  and(eq(leads.id, match.id), isNull(leads.sheetSourceId), isNull(leads.leadRef)),
+                )
                 .returning({ id: leads.id });
               if (updated.length === 0) return false;
               await logSystemActivity(tx, {
@@ -246,8 +297,8 @@ export async function syncSheetSource(
                 action: 'sheet_link',
                 entityType: 'lead',
                 entityId: match.id,
-                before: { sheetSourceId: null, sheetLeadId: match.sheetLeadId },
-                after: { sheetSourceId: source.id, sheetLeadId },
+                before: { sheetSourceId: null, leadRef: match.leadRef },
+                after: { sheetSourceId: source.id, leadRef: sheetLeadId },
               });
               return true;
             });
@@ -264,9 +315,13 @@ export async function syncSheetSource(
           fail(
             row.rowNumber,
             sheetLeadId,
-            match?.sheetLeadId && match.sheetSourceId === source.id
-              ? `Same customer as Lead ID ${match.sheetLeadId} (${duplicate.reason}) — not created. Merge the two rows or give them different details.`
-              : `Same customer as ${match ? nameOf(match) : 'a lead'} from another sheet (${duplicate.reason}) — not created.`,
+            match?.leadRef && match.sheetSourceId === source.id
+              ? `Same customer as Lead ID ${match.leadRef} (${duplicate.reason}) — not created. Merge the two rows or give them different details.`
+              : match?.sheetSourceId === null && match.leadRef
+                ? `Same customer as ${nameOf(match)}, who already has Lead ID ${match.leadRef} (${duplicate.reason}) — not created.`
+                : match?.sheetSourceId === null
+                  ? `Same customer as ${nameOf(match)}, already converted to a project (${duplicate.reason}) — not created.`
+                  : `Same customer as ${match ? nameOf(match) : 'a lead'} from another sheet (${duplicate.reason}) — not created.`,
           );
           continue;
         }

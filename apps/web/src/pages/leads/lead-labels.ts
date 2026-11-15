@@ -19,4 +19,7 @@ export const LEAD_FIELD_LABELS: Record<string, string> = {
   leadDate: 'Lead date',
   notes: 'Notes',
   contactId: 'Contact',
+  leadRef: 'Lead ID',
+  // Older history entries, from before the Lead ID was its own field.
+  sheetLeadId: 'Lead ID',
 };

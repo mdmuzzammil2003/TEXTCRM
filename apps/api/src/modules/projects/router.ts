@@ -54,7 +54,7 @@ import { checkInverterLines, withInverterLabels } from '../hardware/inverter-lin
 import { assertHardware, hardwareOption } from '../hardware/router.ts';
 import { assertOption } from '../options.ts';
 import { containsPattern, phoneContains } from '../search.ts';
-import { actorOf, editableProject, notFound } from './common.ts';
+import { actorOf, editableProject, notFound, projectRef } from './common.ts';
 import { convertLead, previewConversion } from './conversion.ts';
 import { loadSections, sectionProcedures } from './sections.ts';
 
@@ -93,6 +93,7 @@ function filtersWhere(filters: Filters, userId: string): SQL | undefined {
     const pattern = containsPattern(filters.search);
     const matches = or(
       ilike(projects.projectNumber, pattern),
+      sql`${projectRef} ilike ${pattern}`,
       ilike(projects.title, pattern),
       sql`${customerName} ilike ${pattern}`,
       ilike(projects.suburb, pattern),
@@ -127,6 +128,7 @@ function listOrder(sort: ListInput['sort']): SQL[] {
 const rowFields = {
   id: projects.id,
   projectNumber: projects.projectNumber,
+  projectRef,
   title: projects.title,
   contactId: projects.contactId,
   customerName,
@@ -295,6 +297,7 @@ export const projectsRouter = router({
           },
           salesName: sales.name,
           createdByName: createdBy.name,
+          projectRef,
         })
         .from(projects)
         .innerJoin(contacts, eq(contacts.id, projects.contactId))
@@ -337,6 +340,7 @@ export const projectsRouter = router({
         contact: row.contact,
         salesName: row.salesName,
         createdByName: row.createdByName,
+        projectRef: row.projectRef,
         canViewLead: hasPermission(ctx.user.permissions, 'leads', 'view'),
         system: system
           ? {

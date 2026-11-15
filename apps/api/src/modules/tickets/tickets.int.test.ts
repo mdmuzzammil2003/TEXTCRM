@@ -43,6 +43,7 @@ describe('service tickets (Step 2.8)', () => {
     ));
     const { id: leadId } = await as().leads.create({
       values: {
+        leadRef: '7628533',
         firstName: 'Olivia',
         lastName: 'Nguyen',
         email: 'olivia@example.com',

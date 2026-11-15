@@ -43,6 +43,7 @@ import {
   ticketWarrantyClaims,
   users,
 } from '../../db/schema/index.ts';
+import { projectRef } from '../projects/common.ts';
 import { permissionProcedure, router } from '../../trpc/trpc.ts';
 import { logSystemActivity } from '../activities/service.ts';
 import { diff, recordAudit, type Actor } from '../audit.ts';
@@ -165,6 +166,7 @@ function filtersWhere(filters: Filters, userId: string): SQL | undefined {
       sql`${customerName} ilike ${pattern}`,
       ilike(contacts.email, pattern),
       ilike(projects.projectNumber, pattern),
+      sql`${projectRef} ilike ${pattern}`,
       phoneContains(contacts.mobile, filters.search),
     );
     if (matches) conditions.push(matches);
@@ -209,6 +211,7 @@ const rowFields = {
   >`(select ca.suburb from contact_addresses ca where ca.contact_id = ${contacts.id} order by ca.is_primary desc limit 1)`,
   projectId: tickets.projectId,
   projectNumber: projects.projectNumber,
+  projectRef,
   assignedUserId: tickets.assignedUserId,
   assignedName: assignee.name,
   createdAt: tickets.createdAt,
@@ -357,6 +360,7 @@ export const ticketsRouter = router({
             .select({
               id: projects.id,
               projectNumber: projects.projectNumber,
+              projectRef,
               title: projects.title,
               streetAddress: projects.streetAddress,
               suburb: projects.suburb,
@@ -838,6 +842,7 @@ export const ticketsRouter = router({
         .select({
           id: projects.id,
           projectNumber: projects.projectNumber,
+          projectRef,
           title: projects.title,
           suburb: projects.suburb,
         })

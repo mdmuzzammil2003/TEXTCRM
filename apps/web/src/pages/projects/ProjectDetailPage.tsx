@@ -19,6 +19,7 @@ import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTim
 import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
 import { HistoryList } from '../../components/HistoryList.tsx';
+import { LeadIdLink } from '../../components/LeadIdLink.tsx';
 import { LEAD_FIELD_LABELS } from '../leads/lead-labels.ts';
 import { errorMessage } from '../../lib/errors.ts';
 import { fullName } from '../../lib/format.ts';
@@ -218,7 +219,9 @@ function ProjectView({ project }: { project: Project }) {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-mono text-sm text-fg-muted">{project.projectNumber}</p>
+            <p className="flex items-center gap-1.5 text-sm text-fg-muted">
+              Project ID <LeadIdLink value={project.projectRef} label="Project ID" />
+            </p>
             <h1 className="truncate text-2xl font-semibold tracking-tight">
               {project.title ? `${customer} · ${project.title}` : customer}
             </h1>

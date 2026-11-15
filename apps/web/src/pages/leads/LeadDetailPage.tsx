@@ -24,6 +24,7 @@ import { EmailLinks } from '../../components/EmailLinks.tsx';
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { DetailList } from '../../components/DetailList.tsx';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
+import { LeadIdLink } from '../../components/LeadIdLink.tsx';
 import { LEAD_FIELD_LABELS } from './lead-labels.ts';
 import { HistoryList } from '../../components/HistoryList.tsx';
 import { errorMessage } from '../../lib/errors.ts';
@@ -178,6 +179,9 @@ function LeadView({ lead }: { lead: Lead }) {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-sm text-fg-muted">
+              Lead ID <LeadIdLink value={lead.leadRef} />
+            </p>
             <h1 className="truncate text-2xl font-semibold tracking-tight">{name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-muted">
               {lead.mobile && (
@@ -271,7 +275,7 @@ function LeadView({ lead }: { lead: Lead }) {
                 </Button>
               ))}
             {editable && !lead.project && lead.status !== LEAD_LOST && (
-              <ConvertToProjectButton leadId={lead.id} />
+              <ConvertToProjectButton leadId={lead.id} hasLeadRef={Boolean(lead.leadRef)} />
             )}
           </div>
         </div>
@@ -358,6 +362,7 @@ function LeadView({ lead }: { lead: Lead }) {
             <CardContent className="py-1">
               <DetailList
                 items={[
+                  { label: 'Lead ID', value: lead.leadRef && <LeadIdLink value={lead.leadRef} /> },
                   { label: 'Lead source', value: lead.source },
                   { label: 'Lead date', value: formatDate(lead.leadDate) },
                   { label: 'Sales person', value: lead.ownerName ?? 'Unassigned' },
@@ -371,7 +376,7 @@ function LeadView({ lead }: { lead: Lead }) {
                           : ''
                     }`,
                   },
-                  ...(lead.sheetSourceId && lead.sheetLeadId
+                  ...(lead.sheetSourceId && lead.leadRef
                     ? [{ label: 'Live sheet', value: sheetOwnership(lead) }]
                     : []),
                 ]}
@@ -494,17 +499,12 @@ function LeadView({ lead }: { lead: Lead }) {
 }
 
 /** Whether the live sheet still updates this lead (§1.8 "the Sheet creates, the CRM owns after"). */
-function sheetOwnership(lead: {
-  sheetLeadId: string | null;
-  crmEditedAt: string | null;
-  createdByUserId: string | null;
-}) {
-  const id = `Lead ID ${lead.sheetLeadId ?? ''}`;
-  if (lead.createdByUserId) return `${id} · linked; the CRM owns this lead`;
+function sheetOwnership(lead: { crmEditedAt: string | null; createdByUserId: string | null }) {
+  if (lead.createdByUserId) return 'Linked; the CRM owns this lead';
   if (lead.crmEditedAt) {
-    return `${id} · edited in the CRM ${formatDate(lead.crmEditedAt)}, so the sheet no longer changes it`;
+    return `Edited in the CRM ${formatDate(lead.crmEditedAt)}, so the sheet no longer changes it`;
   }
-  return `${id} · corrections in the sheet still update it until someone edits it here`;
+  return 'Corrections in the sheet still update it until someone edits it here';
 }
 
 export function LeadDetailPage() {

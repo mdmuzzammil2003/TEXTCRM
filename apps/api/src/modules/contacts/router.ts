@@ -36,6 +36,7 @@ import {
   tickets,
   users,
 } from '../../db/schema/index.ts';
+import { projectRef } from '../projects/common.ts';
 import { permissionProcedure, router } from '../../trpc/trpc.ts';
 import { diff, entityHistory, recordAudit, type Actor } from '../audit.ts';
 import { anyEmailMatches, extraEmailsLike } from '../emails.ts';
@@ -274,6 +275,7 @@ export const contactsRouter = router({
               .select({
                 id: projects.id,
                 projectNumber: projects.projectNumber,
+                projectRef,
                 title: projects.title,
                 status: projects.status,
                 stage: projects.stage,

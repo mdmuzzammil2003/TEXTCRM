@@ -26,8 +26,27 @@ const isoDate = z.iso.date({ error: 'Enter a date.' });
 
 // ── Lead input ────────────────────────────────────────────────────────────
 
+/**
+ * The Lead ID: typed in (in practice the OpenSolar project ID) or read from a sheet — never made
+ * up by the CRM. Optional, but a lead needs one to be converted; it then becomes the Project ID.
+ */
+export const leadRefField = z
+  .string()
+  .trim()
+  .max(100, 'A Lead ID can be at most 100 characters.')
+  .regex(/^[A-Za-z0-9._-]*$/, 'A Lead ID has letters, numbers, dots or dashes only — no spaces.')
+  .nullish()
+  // Left out = keep the lead's current Lead ID; empty = no Lead ID.
+  .transform((value) => (value === undefined ? undefined : value || null));
+
+/** The OpenSolar page of a Lead ID / Project ID. */
+export function openSolarProjectUrl(leadRef: string): string {
+  return `https://app.opensolar.com/projects/${encodeURIComponent(leadRef)}/manage`;
+}
+
 export const leadInputSchema = z
   .object({
+    leadRef: leadRefField,
     firstName: z.string().trim().min(1, 'Enter a first name.').max(100),
     lastName: optionalText(100),
     /** One box, several addresses separated by spaces: the first is primary, the rest are tags. */

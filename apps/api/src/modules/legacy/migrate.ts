@@ -39,6 +39,7 @@ import {
 import { findMatchingContact } from '../contacts/match.ts';
 import { findDuplicate } from '../leads/router.ts';
 import { activeOptions } from '../options.ts';
+import { leadWithRef } from '../leads/lead-ref.ts';
 import { convertLead } from '../projects/conversion.ts';
 import type { LegacyContact, LegacyData, LegacyLead, LegacyProject } from './legacy-data.ts';
 
@@ -309,7 +310,7 @@ async function run(tx: Tx, user: AuthUser, data: LegacyData, options: MigrationO
             entityId: lead.id,
             after: { reason: 'merged', mergedInto: keptId },
           });
-          retired = ` The CRM already had it as its own lead${lead.sheetLeadId ? ` (live sheet Lead ID ${lead.sheetLeadId})` : ''}: that lead is moved to Deleted (restorable) and the sheet won't bring it back.`;
+          retired = ` The CRM already had it as its own lead${lead.leadRef ? ` (live sheet Lead ID ${lead.leadRef})` : ''}: that lead is moved to Deleted (restorable) and the sheet won't bring it back.`;
         }
       }
       say(
@@ -586,6 +587,15 @@ async function migrateProject(
     );
   if (legacy.saleDate) {
     await tx.update(leads).set({ saleDate: legacy.saleDate }).where(eq(leads.id, leadId));
+  }
+  // A project needs its lead's Lead ID (it is the Project ID). The old job number is that ID —
+  // e.g. 9979467 is the OpenSolar project — so a lead without one takes it, when it's free.
+  const [crmLead] = await tx
+    .select({ leadRef: leads.leadRef })
+    .from(leads)
+    .where(eq(leads.id, leadId));
+  if (!crmLead?.leadRef && !(await leadWithRef(tx, number))) {
+    await tx.update(leads).set({ leadRef: number }).where(eq(leads.id, leadId));
   }
 
   let projectId: string;

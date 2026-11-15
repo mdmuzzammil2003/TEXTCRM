@@ -2,6 +2,7 @@ import { PROJECT_FINAL_STAGE, PROJECT_STAGES, type ProjectStage } from '@mms/sha
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { GripVertical, MoreHorizontal } from 'lucide-react';
+import { OpenSolarIcon } from '../../components/LeadIdLink.tsx';
 import { useState, type DragEvent } from 'react';
 import { errorMessage } from '../../lib/errors.ts';
 import { formatDate } from '../../lib/format.ts';
@@ -49,7 +50,10 @@ function ProjectCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-xs text-fg-subtle">{card.projectNumber}</p>
+          <p className="flex items-center gap-1 font-mono text-xs text-fg-subtle">
+            {card.projectRef ?? '—'}
+            <OpenSolarIcon value={card.projectRef} />
+          </p>
           <Link
             to="/projects/$projectId"
             params={{ projectId: card.id }}
@@ -61,7 +65,11 @@ function ProjectCard({
         {canMove ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <IconButton label={`Move ${card.projectNumber}`} size="sm" className="-mt-1 -mr-1">
+              <IconButton
+                label={`Move ${card.projectRef ?? card.customerName}`}
+                size="sm"
+                className="-mt-1 -mr-1"
+              >
                 <MoreHorizontal />
               </IconButton>
             </DropdownMenuTrigger>
@@ -136,8 +144,8 @@ export function ProjectBoard({ board, queryKey }: { board: Board; queryKey: Quer
       toast({
         title:
           stage === PROJECT_FINAL_STAGE
-            ? `${card.projectNumber} completed`
-            : `${card.projectNumber} moved to ${stage}`,
+            ? `${card.projectRef ?? card.customerName} completed`
+            : `${card.projectRef ?? card.customerName} moved to ${stage}`,
         tone: 'success',
       });
     } catch (error) {

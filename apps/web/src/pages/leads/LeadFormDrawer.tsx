@@ -34,6 +34,11 @@ import {
 
 export type EditableLead = {
   id: string;
+  leadRef: string | null;
+  /** Set once converted: the Lead ID is then the Project ID and can't change. */
+  convertedAt: string | null;
+  /** Live-sheet leads keep the sheet's Lead ID. */
+  sheetSourceId: string | null;
   firstName: string;
   lastName: string | null;
   email: string | null;
@@ -149,6 +154,7 @@ function LeadForm({ lead, onDone }: { lead?: EditableLead; onDone: (id: string) 
   const form = useForm<LeadInput, unknown, LeadValues>({
     resolver: zodResolver(leadInputSchema),
     defaultValues: {
+      leadRef: lead?.leadRef ?? '',
       firstName: lead?.firstName ?? '',
       lastName: lead?.lastName ?? '',
       email: [lead?.email, ...(lead?.extraEmails ?? [])].filter(Boolean).join(' '),
@@ -260,7 +266,6 @@ function LeadForm({ lead, onDone }: { lead?: EditableLead; onDone: (id: string) 
               <Input
                 {...props}
                 {...textInput(field)}
-                inputMode="numeric"
                 maxLength={4}
                 onChange={(event) => {
                   field.onChange(event.target.value);
@@ -287,6 +292,28 @@ function LeadForm({ lead, onDone }: { lead?: EditableLead; onDone: (id: string) 
 
         <fieldset className="grid gap-4 sm:grid-cols-2">
           <legend className="mb-3 text-sm font-semibold">Lead</legend>
+          <FormField
+            control={control}
+            name="leadRef"
+            label="Lead ID"
+            hint={
+              lead?.convertedAt
+                ? 'Locked: this lead is now a project, and this is its Project ID.'
+                : lead?.sheetSourceId
+                  ? 'Comes from the live sheet — change it there.'
+                  : 'The OpenSolar project ID, e.g. 7628533. Needed to convert to a project.'
+            }
+            className="sm:col-span-2"
+          >
+            {(field, props) => (
+              <Input
+                {...props}
+                {...textInput(field)}
+                autoComplete="off"
+                readOnly={Boolean(lead?.convertedAt ?? lead?.sheetSourceId)}
+              />
+            )}
+          </FormField>
           <FormField control={control} name="source" label="Lead source">
             {(field, props) => (
               <Select

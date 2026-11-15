@@ -38,10 +38,12 @@ import {
 } from '@mms/shared';
 import type { Db, Tx } from '../../db/client.ts';
 import { activities, contacts, leads, projects, users } from '../../db/schema/index.ts';
+import { projectRef } from '../projects/common.ts';
 import { permissionProcedure, router } from '../../trpc/trpc.ts';
 import { openTasksWhere, logSystemActivity } from '../activities/service.ts';
 import { findMatchingContact } from '../contacts/match.ts';
 import { leadDetailProcedures, loadLeadDetails } from './details.ts';
+import { assertLeadRefFree, withLeadRefCheck } from './lead-ref.ts';
 import { diff, entityHistory, recordAudit, type Actor } from '../audit.ts';
 import { assertOption } from '../options.ts';
 import { containsPattern, phoneContains } from '../search.ts';
@@ -133,6 +135,25 @@ function assertEditable(lead: { deletedAt: Date | null; status: string }) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'This lead is deleted. Restore it before making changes.',
+    });
+  }
+}
+
+/**
+ * The Lead ID is locked once the lead is a project (it is the Project ID), and on live-sheet leads
+ * (the sync finds them by it — change it in the sheet instead).
+ */
+function assertLeadRefEditable(lead: { convertedAt: Date | null; sheetSourceId: string | null }) {
+  if (lead.convertedAt) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: "This lead has been converted to a project, so its Lead ID can't be changed.",
+    });
+  }
+  if (lead.sheetSourceId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: "This lead's Lead ID comes from the live sheet and can't be changed in the CRM.",
     });
   }
 }
@@ -475,7 +496,7 @@ export const leadsRouter = router({
         entityHistory(ctx.db, 'lead', lead.id),
         loadLeadDetails(ctx.db, lead.id),
         ctx.db
-          .select({ id: projects.id, projectNumber: projects.projectNumber })
+          .select({ id: projects.id, projectNumber: projects.projectNumber, projectRef })
           .from(projects)
           .where(eq(projects.leadId, lead.id)),
       ]);
@@ -536,73 +557,86 @@ export const leadsRouter = router({
       }),
     )
     .mutation(({ ctx, input }) =>
-      ctx.db.transaction(async (tx) => {
-        const { values } = input;
-        await validateLead(tx, values);
-        const match = await findDuplicate(tx, values);
-        if (match && (match.matchedOn !== 'name' || !input.confirmNotDuplicate)) {
-          throw duplicateError(match);
-        }
-        const contact = await findMatchingContact(tx, values);
-        const [created] = await tx
-          .insert(leads)
-          .values({
-            ...leadRow(values),
-            leadDate: values.leadDate ?? businessToday(),
-            contactId: contact?.id ?? null,
-            createdByUserId: ctx.user.id,
-            updatedByUserId: ctx.user.id,
-          })
-          .returning({ id: leads.id });
-        if (!created) throw new Error('Insert returned no row');
-        await logSystemActivity(tx, {
-          entityType: 'lead',
-          entityId: created.id,
-          authorUserId: ctx.user.id,
-          subject: 'Lead created',
-          metadata: { status: values.status },
-        });
-        await recordAudit(tx, actorOf(ctx), {
-          action: 'create',
-          entityType: 'lead',
-          entityId: created.id,
-          after: { ...leadRow(values), contactId: contact?.id ?? null },
-        });
-        return created;
-      }),
+      withLeadRefCheck(() =>
+        ctx.db.transaction(async (tx) => {
+          const { values } = input;
+          await validateLead(tx, values);
+          await assertLeadRefFree(tx, values.leadRef ?? null);
+          const match = await findDuplicate(tx, values);
+          if (match && (match.matchedOn !== 'name' || !input.confirmNotDuplicate)) {
+            throw duplicateError(match);
+          }
+          const contact = await findMatchingContact(tx, values);
+          const [created] = await tx
+            .insert(leads)
+            .values({
+              ...leadRow(values),
+              leadRef: values.leadRef ?? null,
+              leadDate: values.leadDate ?? businessToday(),
+              contactId: contact?.id ?? null,
+              createdByUserId: ctx.user.id,
+              updatedByUserId: ctx.user.id,
+            })
+            .returning({ id: leads.id });
+          if (!created) throw new Error('Insert returned no row');
+          await logSystemActivity(tx, {
+            entityType: 'lead',
+            entityId: created.id,
+            authorUserId: ctx.user.id,
+            subject: 'Lead created',
+            metadata: { status: values.status },
+          });
+          await recordAudit(tx, actorOf(ctx), {
+            action: 'create',
+            entityType: 'lead',
+            entityId: created.id,
+            after: { ...leadRow(values), leadRef: values.leadRef ?? null, contactId: contact?.id ?? null },
+          });
+          return created;
+        }),
+      ),
     ),
 
   update: permissionProcedure('leads', 'edit')
     .input(z.object({ id: z.uuid(), values: leadInputSchema }))
     .mutation(({ ctx, input }) =>
-      ctx.db.transaction(async (tx) => {
-        const existing = await loadLead(tx, input.id);
-        assertEditable(existing);
-        const { values } = input;
-        await validateLead(tx, values, existing);
-        const match = await findDuplicate(tx, values, input.id);
-        if (match && match.matchedOn !== 'name') throw duplicateError(match);
+      withLeadRefCheck(() =>
+        ctx.db.transaction(async (tx) => {
+          const existing = await loadLead(tx, input.id);
+          assertEditable(existing);
+          const { values } = input;
+          await validateLead(tx, values, existing);
+          // Left out of the values = unchanged.
+          const leadRef = values.leadRef === undefined ? existing.leadRef : values.leadRef;
+          if (leadRef !== existing.leadRef) {
+            assertLeadRefEditable(existing);
+            await assertLeadRefFree(tx, leadRef, input.id);
+          }
+          const match = await findDuplicate(tx, values, input.id);
+          if (match && match.matchedOn !== 'name') throw duplicateError(match);
 
-        const row = {
-          ...leadRow(values),
-          leadDate: values.leadDate ?? existing.leadDate,
-          contactId: existing.contactId ?? (await findMatchingContact(tx, values))?.id ?? null,
-        };
-        const changes = diff(existing, row);
-        if (!changes) return { id: input.id };
-        await tx
-          .update(leads)
-          .set({ ...row, crmEditedAt: new Date(), updatedByUserId: ctx.user.id })
-          .where(eq(leads.id, input.id));
-        await logChanges(tx, input.id, ctx.user.id, existing, row);
-        await recordAudit(tx, actorOf(ctx), {
-          action: 'update',
-          entityType: 'lead',
-          entityId: input.id,
-          ...changes,
-        });
-        return { id: input.id };
-      }),
+          const row = {
+            ...leadRow(values),
+            leadRef,
+            leadDate: values.leadDate ?? existing.leadDate,
+            contactId: existing.contactId ?? (await findMatchingContact(tx, values))?.id ?? null,
+          };
+          const changes = diff(existing, row);
+          if (!changes) return { id: input.id };
+          await tx
+            .update(leads)
+            .set({ ...row, crmEditedAt: new Date(), updatedByUserId: ctx.user.id })
+            .where(eq(leads.id, input.id));
+          await logChanges(tx, input.id, ctx.user.id, existing, row);
+          await recordAudit(tx, actorOf(ctx), {
+            action: 'update',
+            entityType: 'lead',
+            entityId: input.id,
+            ...changes,
+          });
+          return { id: input.id };
+        }),
+      ),
     ),
 
   setStatus: permissionProcedure('leads', 'edit')

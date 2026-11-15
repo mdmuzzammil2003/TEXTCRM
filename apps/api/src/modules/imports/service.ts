@@ -6,6 +6,7 @@ import {
   type ImportAction,
   type ImportTarget,
 } from '@mms/shared';
+import { leadWithRef } from '../leads/lead-ref.ts';
 import type { Db, Tx } from '../../db/client.ts';
 import { importJobRows, importJobs } from '../../db/schema/index.ts';
 import type { Logger } from '../../logger.ts';
@@ -106,6 +107,22 @@ async function decideLead(
   const record = result.record;
   const repeat = sameAsEarlier(leadRowKey(record), seen, rowNumber);
   if (repeat) return repeat;
+
+  // Lead IDs are unique across the CRM: one held by a live sheet's lead or a deleted lead is
+  // reported, never taken over or duplicated.
+  if (record.sheetLeadId) {
+    const holder = await leadWithRef(db, record.sheetLeadId);
+    if (holder && (holder.sheetSourceId !== null || holder.deletedAt !== null)) {
+      const who = [holder.firstName, holder.lastName].filter(Boolean).join(' ');
+      return {
+        action: 'skip',
+        message: holder.deletedAt
+          ? `Lead ID ${record.sheetLeadId} belongs to ${who}, a deleted lead — not imported.`
+          : `Lead ID ${record.sheetLeadId} already belongs to ${who} from a live sheet — not imported.`,
+        recordId: holder.id,
+      };
+    }
+  }
 
   // One-off imports never claim a live sheet's leads: sheetSourceId stays null.
   const match = await findLeadMatch(db, record, null);
@@ -300,7 +317,7 @@ function rowFailure(error: unknown): string {
         ? error.code
         : undefined;
   if (code === '23505') {
-    return 'Clashes with an existing record (same email or mobile) — not saved.';
+    return 'Clashes with an existing record (same Lead ID, email or mobile) — not saved.';
   }
   return "Couldn't be saved. Check the row's values and import it again.";
 }

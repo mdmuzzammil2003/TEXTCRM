@@ -301,11 +301,11 @@ describe('legacy migration (Step 3.4)', () => {
     });
     const [main] = await db
       .insert(leads)
-      .values({ ...values('Logan', '1 Main St', '4114', 'QLD'), sheetLeadId: '3' })
+      .values({ ...values('Logan', '1 Main St', '4114', 'QLD'), leadRef: '3' })
       .returning();
     const [twin] = await db
       .insert(leads)
-      .values({ ...values('Camden', '9 Side Rd', '2570', 'NSW'), sheetLeadId: '6' })
+      .values({ ...values('Camden', '9 Side Rd', '2570', 'NSW'), leadRef: '6' })
       .returning();
     const report = await migrate(true);
     expect(report.lines.find((l) => l.action === 'merge')?.detail).toContain('Lead ID 6');

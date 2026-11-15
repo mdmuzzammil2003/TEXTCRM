@@ -13,6 +13,7 @@ const preview = {
   project: {
     title: '10.56 kW solar + battery',
     address: '12 Church St, Parramatta, NSW, 2150',
+    projectRef: '7628533',
     stage: 'Engineering & DNSP Approval',
     salesPerson: 'Micky',
     system: ['24 × Jinko Tiger Neo'],
@@ -36,6 +37,7 @@ describe('Convert to project', () => {
         'projects.convertLead': {
           id: '22222222-2222-4222-8222-222222222222',
           projectNumber: 'MMS-2026-0001',
+          projectRef: '7628533',
         },
       },
     });
@@ -49,6 +51,28 @@ describe('Convert to project', () => {
     await waitFor(() => {
       expect(calls.find((c) => c.path === 'projects.convertLead')?.input).toEqual({ leadId });
     });
+  });
+
+  it('shows the Project ID (the Lead ID) it will get', async () => {
+    renderPage(<ConvertToProjectButton leadId={leadId} />, {
+      path: '/leads',
+      auth: signedIn(),
+      responses: { 'projects.conversionPreview': preview },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Convert to project' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await within(dialog).findByRole('link', { name: /Project ID 7628533, open in OpenSolar/ }),
+    ).toBeDefined();
+  });
+
+  it('is off until the lead has a Lead ID', async () => {
+    renderPage(<ConvertToProjectButton leadId={leadId} hasLeadRef={false} />, {
+      path: '/leads',
+      auth: signedIn(),
+    });
+    const button = await screen.findByRole('button', { name: 'Convert to project' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('explains why a lead cannot be converted and disables the button', async () => {
@@ -78,6 +102,7 @@ describe('Convert to project', () => {
 const card = (id: string, stage: string, customerName: string) => ({
   id,
   projectNumber: `MMS-2026-${id.slice(0, 4)}`,
+  projectRef: `76${id.slice(0, 5)}`,
   title: null,
   contactId: id,
   customerName,

@@ -173,7 +173,7 @@ function TicketForm({ ticket, onDone }: { ticket: TicketDefaults; onDone: (id?: 
           {select(
             (projects.data ?? []).map((p) => ({
               value: p.id,
-              label: [p.projectNumber, p.title ?? p.suburb].filter(Boolean).join(' · '),
+              label: [p.projectRef, p.title ?? p.suburb].filter(Boolean).join(' · '),
             })),
           )}
         </FormField>

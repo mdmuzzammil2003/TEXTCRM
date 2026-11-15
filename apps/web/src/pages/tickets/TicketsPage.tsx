@@ -74,7 +74,7 @@ const columns = col.columns([
       <span className="flex flex-col">
         <span>{row.original.customerName}</span>
         <span className="text-xs text-fg-muted">
-          {[row.original.projectNumber, row.original.suburb].filter(Boolean).join(' · ')}
+          {[row.original.projectRef, row.original.suburb].filter(Boolean).join(' · ')}
         </span>
       </span>
     ),

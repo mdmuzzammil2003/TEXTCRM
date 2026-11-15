@@ -257,7 +257,7 @@ export async function findLeadMatch(
       .from(leads)
       .where(
         and(
-          eq(leads.sheetLeadId, record.sheetLeadId),
+          eq(leads.leadRef, record.sheetLeadId),
           sheetSourceId ? eq(leads.sheetSourceId, sheetSourceId) : isNull(leads.sheetSourceId),
           isNull(leads.deletedAt),
         ),
@@ -354,7 +354,7 @@ export async function createLeadFromRecord(
     ...leadRow(record.lead),
     leadDate: record.lead.leadDate ?? businessToday(),
     contactId: contact?.id ?? null,
-    sheetLeadId: record.sheetLeadId,
+    leadRef: record.sheetLeadId,
     sheetSourceId,
     createdByUserId: origin.authorUserId,
     updatedByUserId: origin.authorUserId,

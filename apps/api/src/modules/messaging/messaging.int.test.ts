@@ -249,6 +249,7 @@ describe('SMS and email (Steps 5.3, 5.2)', () => {
       });
       const { id: projectLead } = await as().leads.create({
         values: {
+          leadRef: '7628534',
           firstName: 'Jack',
           mobile: '0423 456 789',
           email: 'jack@example.com',

@@ -13,7 +13,7 @@ import { requireDatabaseUrl } from '../env.ts';
 
 /**
  * Made-up leads for performance testing (Step 2.2: "10,000 seeded fake leads page and filter
- * instantly"). Every fake lead has a `sheetLeadId` starting with "fake-" so `--remove` can
+ * instantly"). Every fake lead has a Lead ID (`leadRef`) starting with "fake-" so `--remove` can
  * delete exactly them. Never run against production.
  */
 
@@ -106,7 +106,7 @@ export function fakeLeads(count: number, ownerIds: string[], today = new Date())
       ownerUserId:
         ownerIds.length > 0 && i % 4 !== 0 ? (ownerIds[i % ownerIds.length] ?? null) : null,
       leadDate: date.toISOString().slice(0, 10),
-      sheetLeadId: `fake-${String(i)}`,
+      leadRef: `fake-${String(i)}`,
     };
   });
 }
@@ -134,7 +134,7 @@ async function main() {
     if (values.remove) {
       const removed = await db
         .delete(leads)
-        .where(like(leads.sheetLeadId, 'fake-%'))
+        .where(like(leads.leadRef, 'fake-%'))
         .returning({ id: leads.id });
       console.log(`Removed ${String(removed.length)} fake leads.`);
       return;

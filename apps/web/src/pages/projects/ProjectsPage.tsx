@@ -1,6 +1,7 @@
 import { AU_STATES, formatAud, PROJECT_STAGES, PROJECT_STATUSES } from '@mms/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { functionalUpdate, Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { OpenSolarIcon } from '../../components/LeadIdLink.tsx';
 import { FolderKanban, SlidersHorizontal, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { PageHeader } from '../../components/PageHeader.tsx';
@@ -44,19 +45,22 @@ const col = createDataTableColumns<ProjectRow>();
 const columns = col.columns([
   col.accessor('projectNumber', {
     id: 'projectNumber',
-    header: 'Project',
+    header: 'Project ID',
     enableHiding: false,
     cell: ({ row }) => (
-      <Link
-        to="/projects/$projectId"
-        params={{ projectId: row.original.id }}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        className="font-mono text-xs font-medium hover:text-accent-text hover:underline"
-      >
-        {row.original.projectNumber}
-      </Link>
+      <span className="inline-flex items-center gap-1.5">
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: row.original.id }}
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+          className="font-mono text-xs font-medium hover:text-accent-text hover:underline"
+        >
+          {row.original.projectRef ?? '—'}
+        </Link>
+        <OpenSolarIcon value={row.original.projectRef} />
+      </span>
     ),
   }),
   col.accessor('customerName', {

@@ -40,10 +40,19 @@ function fullName(person: { firstName: string; lastName: string | null }) {
 }
 
 /** Why this lead can't be converted yet — empty when it can. */
-function conversionProblems(lead: Lead, existingProjectNumber: string | null): string[] {
+function conversionProblems(lead: Lead, alreadyConverted: boolean): string[] {
   const problems: string[] = [];
-  if (existingProjectNumber)
-    problems.push(`Already converted to project ${existingProjectNumber}.`);
+  if (alreadyConverted) {
+    problems.push(
+      lead.leadRef
+        ? `Already converted to project ${lead.leadRef}.`
+        : 'Already converted to a project.',
+    );
+  }
+  // The Lead ID becomes the Project ID, so a project can't exist without one.
+  if (!lead.leadRef && !alreadyConverted) {
+    problems.push('Add a Lead ID first — it becomes the Project ID.');
+  }
   if (lead.deletedAt) problems.push('The lead is deleted. Restore it first.');
   if (lead.status === LEAD_LOST)
     problems.push('The lead is marked Lost. Move it back into the pipeline first.');
@@ -117,7 +126,7 @@ export async function previewConversion(db: Db, leadId: string) {
   ]);
   const system = details.system;
   return {
-    problems: conversionProblems(lead, project?.projectNumber ?? null),
+    problems: conversionProblems(lead, Boolean(project)),
     contact: contact
       ? { mode: 'existing' as const, id: contact.id, name: fullName(contact) }
       : { mode: 'new' as const, id: null, name: fullName(lead) },
@@ -129,6 +138,8 @@ export async function previewConversion(db: Db, leadId: string) {
       address: [lead.streetAddress, lead.suburb, lead.state, lead.postcode]
         .filter(Boolean)
         .join(', '),
+      /** Shown as the Project ID: the lead's Lead ID. */
+      projectRef: lead.leadRef,
       stage: 'Engineering & DNSP Approval',
       salesPerson: sales?.name ?? null,
       system: [
@@ -151,12 +162,12 @@ export async function convertLead(
   leadId: string,
   /** Only for migrated jobs that keep their old number (Step 3.4, e.g. 9979467). */
   options: { projectNumber?: string } = {},
-): Promise<{ id: string; projectNumber: string }> {
+): Promise<{ id: string; projectNumber: string; projectRef: string | null }> {
   // Lock the lead row so two people pressing Convert at once queue up.
   const [lead] = await tx.select().from(leads).where(eq(leads.id, leadId)).for('update');
   if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'This lead does not exist.' });
   const already = await existingProject(tx, leadId);
-  const problems = conversionProblems(lead, already?.projectNumber ?? null);
+  const problems = conversionProblems(lead, Boolean(already));
   if (problems.length > 0) {
     throw new TRPCError({
       code: already ? 'CONFLICT' : 'BAD_REQUEST',
@@ -317,7 +328,8 @@ export async function convertLead(
     entityType: 'lead',
     entityId: leadId,
     authorUserId: actor.userId,
-    subject: `Converted to project ${projectNumber}`,
+    // The Project ID people see is the Lead ID (checked above); the internal number stays internal.
+    subject: `Converted to project ${lead.leadRef ?? projectNumber}`,
     metadata: { projectId: project.id, projectNumber, from: lead.status, to: LEAD_CONVERTED },
   });
   await logSystemActivity(tx, {
@@ -340,5 +352,5 @@ export async function convertLead(
     entityId: project.id,
     after: { projectNumber, leadId, contactId: contact.id, contactCreated },
   });
-  return { id: project.id, projectNumber };
+  return { id: project.id, projectNumber, projectRef: lead.leadRef };
 }

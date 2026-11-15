@@ -68,9 +68,13 @@ export const leads = pgTable(
     notes: text(),
     convertedAt: tstz(),
 
-    /** Google Sheets `Lead ID` (§1.8); also kept when a one-off import maps a Lead ID column. */
-    sheetLeadId: text(),
-    /** The live sheet that owns `sheetLeadId` (Step 3.3); null for imported or typed-in leads. */
+    /**
+     * The Lead ID (column `lead_id`): typed in, or from a sheet's `Lead ID` column (§1.8) — in
+     * practice the OpenSolar project ID. Unique across the CRM, never generated, may be empty.
+     * Required to convert; once converted it is locked and shows on the project as its Project ID.
+     */
+    leadRef: text('lead_id'),
+    /** The live sheet that owns `leadRef` (Step 3.3); null for imported or typed-in leads. */
     sheetSourceId: uuid().references(() => sheetSyncSources.id, { onDelete: 'set null' }),
     /** Set on the first CRM edit — after that the sheet sync never touches this lead (§1.8 rule 2). */
     crmEditedAt: tstz(),
@@ -94,11 +98,10 @@ export const leads = pgTable(
     index('leads_contact_idx').on(t.contactId),
     index('leads_email_idx').on(t.email),
     index('leads_mobile_idx').on(t.mobile),
-    index('leads_sheet_lead_id_idx').on(t.sheetLeadId),
-    // One lead per Lead ID per live sheet (§1.8 rule 1).
-    uniqueIndex('leads_sheet_source_lead_id_unique')
-      .on(t.sheetSourceId, t.sheetLeadId)
-      .where(sql`${t.sheetSourceId} is not null`),
+    // One lead per Lead ID across the CRM (also §1.8 rule 1 for each live sheet).
+    uniqueIndex('leads_lead_id_unique')
+      .on(t.leadRef)
+      .where(sql`${t.leadRef} is not null`),
     check('leads_email_lowercase', lowercaseEmailCheck(t.email)),
     check('leads_mobile_e164', e164Check(t.mobile)),
     check('leads_secondary_mobile_e164', e164Check(t.secondaryMobile)),

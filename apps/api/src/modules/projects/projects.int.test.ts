@@ -49,10 +49,16 @@ describe('lead → project conversion and projects', () => {
     notes: 'Dog in the yard',
   };
 
+  /** Each test lead gets its own Lead ID (OpenSolar style), as converting needs one. */
+  let nextRef = 7628530;
+
   /** A lead with system requirements and pricing, ready to convert. */
   async function readyLead(values: LeadInput = olivia) {
     const api = as();
-    const { id } = await api.leads.create({ values: { ...values, ownerUserId: micky } });
+    nextRef += 1;
+    const { id } = await api.leads.create({
+      values: { leadRef: String(nextRef), ...values, ownerUserId: micky },
+    });
     const [panel] = await api.hardware.search({ kind: 'panel', search: '' });
     const [battery] = await api.hardware.search({ kind: 'battery', search: '' });
     if (!panel || !battery) throw new Error('empty catalog');
@@ -96,8 +102,12 @@ describe('lead → project conversion and projects', () => {
 
   it('converts: creates the contact, copies site, system and pricing, links both ways and logs on both', async () => {
     const { id: leadId, panel, battery } = await readyLead();
-    const { id, projectNumber } = await as().projects.convertLead({ leadId });
+    const { id, projectNumber, projectRef } = await as().projects.convertLead({ leadId });
+    // The internal number is still made; people see the Lead ID as the Project ID.
     expect(projectNumber).toMatch(/^MMS-\d{4}-0001$/);
+    const converted = await as().leads.get({ id: leadId });
+    expect(projectRef).toBe(converted.leadRef);
+    expect((await as().projects.get({ id })).projectRef).toBe(converted.leadRef);
 
     const project = await as().projects.get({ id });
     expect(project).toMatchObject({
@@ -143,7 +153,7 @@ describe('lead → project conversion and projects', () => {
 
     // Activity on both records, audit on both.
     const leadTimeline = await as().activities.list({ entityType: 'lead', entityId: leadId });
-    expect(leadTimeline[0]?.subject).toBe(`Converted to project ${projectNumber}`);
+    expect(leadTimeline[0]?.subject).toBe(`Converted to project ${projectRef ?? ''}`);
     const projectTimeline = await as().activities.list({ entityType: 'project', entityId: id });
     expect(projectTimeline[0]?.subject).toBe(
       "Project created from Olivia Nguyen's lead ($14,990.00)",
@@ -298,7 +308,64 @@ describe('lead → project conversion and projects', () => {
     expect(await db.select().from(projects)).toHaveLength(1);
     await expect(as().projects.convertLead({ leadId })).rejects.toMatchObject({ code: 'CONFLICT' });
     const preview = await as().projects.conversionPreview({ leadId });
-    expect(preview.problems[0]).toMatch(/^Already converted to project MMS-/);
+    expect(preview.problems[0]).toMatch(/^Already converted to project 76\d+\.$/);
+  });
+
+  it('Lead ID: needed to convert, unique, kept when left out, locked once converted, and searchable as the Project ID', async () => {
+    const api = as();
+    const { id: noRef } = await api.leads.create({ values: { ...olivia } });
+    expect((await api.projects.conversionPreview({ leadId: noRef })).problems).toContain(
+      'Add a Lead ID first — it becomes the Project ID.',
+    );
+    await expect(api.projects.convertLead({ leadId: noRef })).rejects.toThrow(/Add a Lead ID/);
+
+    // Unique across the CRM, on create and on edit.
+    const { id: other } = await readyLead({
+      ...olivia,
+      firstName: 'Jack',
+      email: 'jack@example.com',
+      mobile: '0423 456 789',
+      streetAddress: '4 Elm Ave',
+    });
+    const otherRef = (await api.leads.get({ id: other })).leadRef ?? '';
+    await expect(
+      api.leads.create({
+        values: {
+          ...olivia,
+          firstName: 'Mia',
+          email: 'mia@example.com',
+          mobile: null,
+          leadRef: otherRef,
+        },
+      }),
+    ).rejects.toThrow('This Lead ID already exists.');
+    await expect(
+      api.leads.update({ id: noRef, values: { ...olivia, leadRef: otherRef } }),
+    ).rejects.toThrow('This Lead ID already exists.');
+
+    // Setting it makes the lead convertible; leaving it out of an edit keeps it.
+    await api.leads.update({ id: noRef, values: { ...olivia, leadRef: '7700001' } });
+    await api.leads.update({ id: noRef, values: { ...olivia, notes: 'Call after 5' } });
+    expect((await api.leads.get({ id: noRef })).leadRef).toBe('7700001');
+    const { id: projectId } = await api.projects.convertLead({ leadId: noRef });
+
+    // Locked from then on.
+    await expect(
+      api.leads.update({
+        id: noRef,
+        values: { ...olivia, status: 'Converted to Project', leadRef: '7700002' },
+      }),
+    ).rejects.toThrow(/converted to a project, so its Lead ID can't be changed/);
+    await expect(
+      api.leads.update({
+        id: noRef,
+        values: { ...olivia, status: 'Converted to Project', leadRef: null },
+      }),
+    ).rejects.toThrow(/can't be changed/);
+
+    // The project list shows and finds it.
+    const list = await api.projects.list({ search: '7700001' });
+    expect(list.rows.map((row) => [row.id, row.projectRef])).toEqual([[projectId, '7700001']]);
   });
 
   it('links an existing contact instead of creating a duplicate, and adds the new property', async () => {

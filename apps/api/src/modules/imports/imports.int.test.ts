@@ -259,8 +259,8 @@ describe('imports (Step 3.2)', () => {
     expect(result).toMatchObject({ status: 'completed', create: 3, skip: 1, error: 2 });
 
     const saved = await liveLeads();
-    expect(saved.map((lead) => lead.sheetLeadId).sort()).toEqual(['101', '102', '105']);
-    const olivia = saved.find((lead) => lead.sheetLeadId === '101');
+    expect(saved.map((lead) => lead.leadRef).sort()).toEqual(['101', '102', '105']);
+    const olivia = saved.find((lead) => lead.leadRef === '101');
     expect(olivia).toMatchObject({
       mobile: '+61412345678',
       leadDate: '2026-11-03',
@@ -271,8 +271,8 @@ describe('imports (Step 3.2)', () => {
       crmEditedAt: null,
     });
     // A mobile stored as a number in the sheet lost its leading zero; it's put back.
-    expect(saved.find((lead) => lead.sheetLeadId === '105')?.mobile).toBe('+61456789012');
-    const jack = saved.find((lead) => lead.sheetLeadId === '102');
+    expect(saved.find((lead) => lead.leadRef === '105')?.mobile).toBe('+61456789012');
+    const jack = saved.find((lead) => lead.leadRef === '102');
     expect(jack).toMatchObject({ state: 'QLD', status: 'New', source: 'Website' });
     const [system] = await db
       .select()
@@ -315,7 +315,7 @@ describe('imports (Step 3.2)', () => {
 
   it('updates intake fields of imported leads, but never a lead edited in the CRM', async () => {
     await importFile(HISTORIC);
-    const [olivia] = await db.select().from(leads).where(eq(leads.sheetLeadId, '101'));
+    const [olivia] = await db.select().from(leads).where(eq(leads.leadRef, '101'));
     await db
       .update(leads)
       .set({ crmEditedAt: new Date(), status: 'Proposal Sent' })
@@ -332,7 +332,7 @@ describe('imports (Step 3.2)', () => {
     const rows = (await as().imports.rows({ id })).rows;
     expect(rows.find((row) => row.rowNumber === 2)?.message).toContain('edited in the CRM');
     expect(rows.find((row) => row.rowNumber === 3)?.message).toBe('Updates primary mobile.');
-    const [jack] = await db.select().from(leads).where(eq(leads.sheetLeadId, '102'));
+    const [jack] = await db.select().from(leads).where(eq(leads.leadRef, '102'));
     expect(jack).toMatchObject({ mobile: '+61499999999', status: 'New', crmEditedAt: null });
     const [after] = await db
       .select()

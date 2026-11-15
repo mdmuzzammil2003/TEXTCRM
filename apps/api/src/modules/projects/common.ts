@@ -1,10 +1,20 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../../db/client.ts';
 import { projects } from '../../db/schema/index.ts';
 import { diff, recordAudit, type Actor } from '../audit.ts';
 
 export type Ctx = { user: { id: string }; meta: Actor['meta'] };
+
+/**
+ * The Project ID people see: the Lead ID of the lead it was converted from (locked from then on).
+ * `projects.project_number` (MMS-YYYY-NNNN) stays as an internal number and is never shown.
+ */
+// Written out with table names: drizzle leaves columns unqualified in one-table selects, and
+// "lead_id" would then mean the subquery's leads.lead_id instead of projects.lead_id.
+export const projectRef = sql<
+  string | null
+>`(select pl.lead_id from leads pl where pl.id = "projects"."lead_id")`;
 
 export const notFound = () =>
   new TRPCError({ code: 'NOT_FOUND', message: 'This project does not exist.' });

@@ -18,6 +18,7 @@ import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTim
 import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { DetailList } from '../../components/DetailList.tsx';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
+import { OpenSolarIcon } from '../../components/LeadIdLink.tsx';
 import { errorMessage } from '../../lib/errors.ts';
 import { formatDate, fullName } from '../../lib/format.ts';
 import { useCan } from '../../lib/hooks.ts';
@@ -133,17 +134,20 @@ function DetailsCard({ ticket, editable }: { ticket: Ticket; editable: boolean }
               label: 'Project',
               value: ticket.project && (
                 <span className="flex flex-col">
-                  {can('projects', 'view') ? (
-                    <Link
-                      to="/projects/$projectId"
-                      params={{ projectId: ticket.project.id }}
-                      className="font-mono text-xs hover:underline"
-                    >
-                      {ticket.project.projectNumber}
-                    </Link>
-                  ) : (
-                    <span className="font-mono text-xs">{ticket.project.projectNumber}</span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    {can('projects', 'view') ? (
+                      <Link
+                        to="/projects/$projectId"
+                        params={{ projectId: ticket.project.id }}
+                        className="font-mono text-xs hover:underline"
+                      >
+                        {ticket.project.projectRef ?? 'Project'}
+                      </Link>
+                    ) : (
+                      <span className="font-mono text-xs">{ticket.project.projectRef ?? '—'}</span>
+                    )}
+                    <OpenSolarIcon value={ticket.project.projectRef} />
+                  </span>
                   <span className="text-fg-muted">
                     {ticket.project.streetAddress}, {ticket.project.suburb} {ticket.project.state}
                   </span>
