@@ -783,6 +783,15 @@ async function migrateProject(
               : null,
             docsStatus: legacy.installationDocsStatus ?? null,
             docsReceivedDate: legacy.installationDocsReceivedDate ?? null,
+          },
+        }),
+    ],
+    [
+      'installer invoice',
+      () =>
+        api.projects.updateInstallerInvoice({
+          id: projectId,
+          values: {
             installerInvoiceNumber: value('installerInvoiceNumber') ?? null,
             installerInvoiceDate: value('installerInvoiceDate') ?? null,
             installerInvoiceAmountAud: value('installerInvoiceAmount') ?? null,

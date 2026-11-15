@@ -11,13 +11,13 @@ import {
   netMeterApplicationSchema,
   gridTiming,
   installationSchema,
+  installerInvoiceSchema,
   isOnFinance,
   stcClaimSchema,
   stcTotals,
   warehouseSchema,
 } from '@mms/shared';
 import type { Db, Tx } from '../../db/client.ts';
-import type { projects } from '../../db/schema/index.ts';
 import {
   companies,
   projectEbVerification,
@@ -25,6 +25,7 @@ import {
   projectGridApplications,
   projectInstallation,
   projectPricing,
+  projects,
   projectStcClaims,
   projectWarehouse,
   users,
@@ -255,7 +256,7 @@ export const sectionProcedures = {
     .input(sectionInput(installationSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        const project = await editableProject(tx, input.id);
         const [existing] = await tx
           .select()
           .from(projectInstallation)
@@ -264,7 +265,6 @@ export const sectionProcedures = {
         await assertOptions(tx, values, existing, [
           ['installationStatuses', 'status', 'installation status'],
           ['installationDocsStatuses', 'docsStatus', 'documents status'],
-          ['installerInvoiceStatuses', 'installerInvoiceStatus', 'invoice status'],
         ]);
         if (
           values.installerCompanyId &&
@@ -307,6 +307,44 @@ export const sectionProcedures = {
             .onConflictDoUpdate({ target: projectInstallation.projectId, set: values }),
         );
         await logStatus(tx, ctx, input.id, 'Installation', existing?.status, values.status);
+        // The database trigger moves the project status with the installation status.
+        const [after] = await tx
+          .select({ status: projects.status })
+          .from(projects)
+          .where(eq(projects.id, input.id));
+        if (after && after.status !== project.status) {
+          await logSystemActivity(tx, {
+            entityType: 'project',
+            entityId: input.id,
+            authorUserId: ctx.user.id,
+            subject: `Status changed from ${project.status} to ${after.status} (linked to the installation status)`,
+            metadata: { field: 'status', from: project.status, to: after.status },
+          });
+        }
+        return { id: input.id };
+      }),
+    ),
+
+  /** The installer's invoice fields of the installation row, edited in their own box. */
+  updateInstallerInvoice: permissionProcedure('projects', 'edit')
+    .input(sectionInput(installerInvoiceSchema))
+    .mutation(({ ctx, input }) =>
+      ctx.db.transaction(async (tx) => {
+        await editableProject(tx, input.id);
+        const [existing] = await tx
+          .select()
+          .from(projectInstallation)
+          .where(eq(projectInstallation.projectId, input.id));
+        const values = input.values;
+        await assertOptions(tx, values, existing, [
+          ['installerInvoiceStatuses', 'installerInvoiceStatus', 'invoice status'],
+        ]);
+        await saveSection(tx, ctx, input.id, 'update_installer_invoice', existing, values, () =>
+          tx
+            .insert(projectInstallation)
+            .values({ projectId: input.id, ...values })
+            .onConflictDoUpdate({ target: projectInstallation.projectId, set: values }),
+        );
         return { id: input.id };
       }),
     ),

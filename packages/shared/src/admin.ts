@@ -224,6 +224,14 @@ export const PROTECTED_OPTION_VALUES: Readonly<Record<string, readonly string[]>
   contactTypes: ['Residential'],
   companyTypes: ['Subcontractor Installer'],
   gridApplicationStatuses: ['Grid App Approved', 'Grid Rejected'],
+  // Linked to the project status by a database trigger.
+  installationStatuses: [
+    'Unscheduled',
+    'Installation Completed',
+    'Complete',
+    'Closed',
+    'Cancelled',
+  ],
   isFinanceOptions: ['No (Cash / Direct Payment)'],
 };
 

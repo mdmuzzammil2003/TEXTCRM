@@ -47,6 +47,7 @@ import {
   FinanceCard,
   GridApplicationCard,
   InstallationCard,
+  InstallerInvoiceCard,
   NetMeterApplicationCard,
   StcClaimCard,
   WarehouseCard,
@@ -128,8 +129,8 @@ const PROJECT_FIELD_LABELS: Record<string, string> = {
   bookingDate: 'Install date',
   bookedByUserId: 'Booked by',
   completedDate: 'Install completed',
-  docsStatus: 'Install documents',
-  'update_installation.docsReceivedDate': 'Install documents received',
+  docsStatus: 'Installation documents',
+  'update_installation.docsReceivedDate': 'Installation documents received',
   installerInvoiceNumber: 'Installer invoice no.',
   installerInvoiceDate: 'Installer invoice date',
   installerInvoiceAmountAud: 'Installer invoice amount',
@@ -323,7 +324,7 @@ function ProjectView({ project }: { project: Project }) {
                 {closed && ' · reopen the job (status Active) to move it'}
               </p>
             </div>
-            <Field label="Status">
+            <Field label="Status" hint="Linked to Installation Status">
               {(props) => (
                 <Select
                   {...props}
@@ -423,6 +424,7 @@ function ProjectView({ project }: { project: Project }) {
               <FinanceCard project={project} editable={editable} />
               <WarehouseCard project={project} editable={editable} />
               <InstallationCard project={project} editable={editable} />
+              <InstallerInvoiceCard project={project} editable={editable} />
               <StcClaimCard project={project} editable={editable} />
             </div>
           </TabsContent>

@@ -215,10 +215,29 @@ async function changeStageOrStatus(
   };
   const changes = diff(existing, { stage: after.stage, status: after.status });
   if (!changes) return false;
+  const installationStatus = async () =>
+    (
+      await tx
+        .select({ status: projectInstallation.status })
+        .from(projectInstallation)
+        .where(eq(projectInstallation.projectId, id))
+    )[0]?.status ?? null;
+  const installationBefore = await installationStatus();
+  // The database trigger moves the installation status with the project status.
   await tx
     .update(projects)
     .set({ ...after, updatedByUserId: ctx.user.id })
     .where(eq(projects.id, id));
+  const installationAfter = await installationStatus();
+  if (installationAfter && installationAfter !== installationBefore) {
+    await logSystemActivity(tx, {
+      entityType: 'project',
+      entityId: id,
+      authorUserId: ctx.user.id,
+      subject: `Installation: ${installationAfter} (linked to the project status)`,
+      metadata: { section: 'Installation', from: installationBefore, to: installationAfter },
+    });
+  }
   if (existing.stage !== after.stage) {
     await logSystemActivity(tx, {
       entityType: 'project',

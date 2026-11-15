@@ -162,6 +162,13 @@
       "when": 1794765899540,
       "tag": "0022_lead_id_numeric",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794771157945,
+      "tag": "0023_project_installation_status_sync",
+      "breakpoints": true
     }
   ]
 }

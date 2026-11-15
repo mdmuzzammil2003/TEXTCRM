@@ -7,6 +7,7 @@ import {
   gridApplicationSchema,
   netMeterApplicationSchema,
   installationSchema,
+  installerInvoiceSchema,
   stcClaimSchema,
   warehouseSchema,
   type EbVerificationInput,
@@ -19,6 +20,8 @@ import {
   type NetMeterApplicationValues,
   type InstallationInput,
   type InstallationValues,
+  type InstallerInvoiceInput,
+  type InstallerInvoiceValues,
   type StcClaimInput,
   type StcClaimValues,
   type WarehouseInput,
@@ -474,7 +477,13 @@ export function InstallationCard({ project, editable }: CardProps) {
   }
 
   const fields: FieldSpec<InstallationInput>[] = [
-    { name: 'status', label: 'Status', kind: 'option', list: 'installationStatuses' },
+    {
+      name: 'status',
+      label: 'Status',
+      kind: 'option',
+      list: 'installationStatuses',
+      hint: 'Linked to Project Status',
+    },
     {
       name: 'installerCompanyId',
       label: 'Installer',
@@ -486,26 +495,17 @@ export function InstallationCard({ project, editable }: CardProps) {
     { name: 'bookingDate', label: 'Install date', kind: 'date' },
     { name: 'bookedByUserId', label: 'Booked by', kind: 'choice', choices: userChoices },
     { name: 'completedDate', label: 'Completed on', kind: 'date' },
-    { heading: 'Install documents' },
+    { heading: 'Installation documents' },
     { name: 'docsStatus', label: 'Documents', kind: 'option', list: 'installationDocsStatuses' },
     { name: 'docsReceivedDate', label: 'Received on', kind: 'date' },
-    { heading: 'Installer invoice' },
-    { name: 'installerInvoiceNumber', label: 'Invoice no.', kind: 'text' },
-    { name: 'installerInvoiceDate', label: 'Invoice date', kind: 'date' },
-    { name: 'installerInvoiceAmountAud', label: 'Amount', kind: 'money' },
-    {
-      name: 'installerInvoiceStatus',
-      label: 'Status',
-      kind: 'option',
-      list: 'installerInvoiceStatuses',
-    },
   ];
 
   return (
     <EditableSection
-      title="Installation"
+      title="Installation details"
       badge={<StatusBadge status={install?.status} />}
       editable={editable}
+      description="Status is linked to the project status: changing one changes the other."
       form={(close) => (
         <SectionForm<InstallationInput, InstallationValues>
           resolver={zodResolver(installationSchema)}
@@ -518,14 +518,10 @@ export function InstallationCard({ project, editable }: CardProps) {
             completedDate: install?.completedDate ?? '',
             docsStatus: install?.docsStatus ?? '',
             docsReceivedDate: install?.docsReceivedDate ?? '',
-            installerInvoiceNumber: install?.installerInvoiceNumber ?? '',
-            installerInvoiceDate: install?.installerInvoiceDate ?? '',
-            installerInvoiceAmountAud: install?.installerInvoiceAmountAud ?? '',
-            installerInvoiceStatus: install?.installerInvoiceStatus ?? '',
           }}
           fields={fields}
           submit={(values) => update.mutateAsync({ id: project.id, values })}
-          success="Installation saved"
+          success="Installation details saved"
           onDone={close}
         />
       )}
@@ -571,15 +567,67 @@ export function InstallationCard({ project, editable }: CardProps) {
                 install.docsReceivedDate && `received ${formatDate(install.docsReceivedDate)}`,
               ),
             },
-            {
-              label: 'Invoice',
-              value: joined(
-                install.installerInvoiceNumber,
-                money(install.installerInvoiceAmountAud),
-                day(install.installerInvoiceDate),
-                install.installerInvoiceStatus,
-              ),
-            },
+          ]}
+        />
+      ) : (
+        NOT_STARTED
+      )}
+    </EditableSection>
+  );
+}
+
+// ── Installer invoice ────────────────────────────────────────────────────
+
+const INSTALLER_INVOICE_FIELDS: FieldSpec<InstallerInvoiceInput>[] = [
+  { name: 'installerInvoiceNumber', label: 'Invoice no.', kind: 'text' },
+  { name: 'installerInvoiceDate', label: 'Invoice date', kind: 'date' },
+  { name: 'installerInvoiceAmountAud', label: 'Amount', kind: 'money' },
+  {
+    name: 'installerInvoiceStatus',
+    label: 'Status',
+    kind: 'option',
+    list: 'installerInvoiceStatuses',
+  },
+];
+
+export function InstallerInvoiceCard({ project, editable }: CardProps) {
+  const trpc = useTRPC();
+  const update = useMutation(trpc.projects.updateInstallerInvoice.mutationOptions());
+  const install = project.installation;
+  const hasInvoice = Boolean(
+    install &&
+    (install.installerInvoiceNumber ??
+      install.installerInvoiceDate ??
+      install.installerInvoiceAmountAud ??
+      install.installerInvoiceStatus),
+  );
+  return (
+    <EditableSection
+      title="Installer invoice"
+      badge={<StatusBadge status={install?.installerInvoiceStatus} />}
+      editable={editable}
+      form={(close) => (
+        <SectionForm<InstallerInvoiceInput, InstallerInvoiceValues>
+          resolver={zodResolver(installerInvoiceSchema)}
+          defaultValues={{
+            installerInvoiceNumber: install?.installerInvoiceNumber ?? '',
+            installerInvoiceDate: install?.installerInvoiceDate ?? '',
+            installerInvoiceAmountAud: install?.installerInvoiceAmountAud ?? '',
+            installerInvoiceStatus: install?.installerInvoiceStatus ?? '',
+          }}
+          fields={INSTALLER_INVOICE_FIELDS}
+          submit={(values) => update.mutateAsync({ id: project.id, values })}
+          success="Installer invoice saved"
+          onDone={close}
+        />
+      )}
+    >
+      {install && hasInvoice ? (
+        <DetailList
+          items={[
+            { label: 'Invoice no.', value: install.installerInvoiceNumber },
+            { label: 'Amount', value: money(install.installerInvoiceAmountAud) },
+            { label: 'Invoice date', value: day(install.installerInvoiceDate) },
           ]}
         />
       ) : (

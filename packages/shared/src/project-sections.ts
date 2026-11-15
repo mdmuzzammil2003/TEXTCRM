@@ -299,10 +299,6 @@ export const installationSchema = z
     completedDate: optionalDate,
     docsStatus: option,
     docsReceivedDate: optionalDate,
-    installerInvoiceNumber: reference,
-    installerInvoiceDate: optionalDate,
-    installerInvoiceAmountAud: moneyField('the invoice amount'),
-    installerInvoiceStatus: option,
   })
   .superRefine((install, ctx) => {
     notInFuture(ctx, install.completedDate, 'completedDate', 'completion date');
@@ -318,6 +314,30 @@ export const installationSchema = z
 
 export type InstallationInput = z.input<typeof installationSchema>;
 export type InstallationValues = z.output<typeof installationSchema>;
+
+/**
+ * Installation status <-> project status, kept in step both ways by a database trigger
+ * (migration 0023): the project status an installation status means.
+ */
+export function projectStatusForInstallation(status: string | null): string {
+  if (status === 'Installation Completed' || status === 'Complete') return 'Completed';
+  if (status === 'Closed') return 'Closed';
+  if (status === 'Cancelled') return 'Lost';
+  return 'Active';
+}
+
+// ── Installer invoice ────────────────────────────────────────────────────
+// Stored on the installation row, edited in its own box.
+
+export const installerInvoiceSchema = z.object({
+  installerInvoiceNumber: reference,
+  installerInvoiceDate: optionalDate,
+  installerInvoiceAmountAud: moneyField('the invoice amount'),
+  installerInvoiceStatus: option,
+});
+
+export type InstallerInvoiceInput = z.input<typeof installerInvoiceSchema>;
+export type InstallerInvoiceValues = z.output<typeof installerInvoiceSchema>;
 
 /** "November 2026" — the legacy "installation completed month", derived from the date. */
 export function completedMonth(completedDate: string | null): string | null {

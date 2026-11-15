@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { emptyPermissionMatrix, type PermissionMatrix } from '@mms/shared';
 import { activities, auditLog } from '../../db/schema/index.ts';
@@ -345,6 +345,69 @@ describe('project workspace sections (Step 2.7)', () => {
     });
     expect((await api.projects.list({ installerCompanyId: installer })).total).toBe(1);
     expect((await api.projects.installers()).map((c) => c.name)).toEqual(['Western Sparkies']);
+  });
+
+  it('installation status and project status move together, both ways (also in the database)', async () => {
+    const api = as();
+    const status = async () => {
+      const project = await api.projects.get({ id: projectId });
+      return { project: project.status, installation: project.installation?.status ?? null };
+    };
+
+    await api.projects.updateInstallation({ id: projectId, values: { status: 'In Progress' } });
+    expect(await status()).toEqual({ project: 'Active', installation: 'In Progress' });
+
+    await api.projects.updateInstallation({
+      id: projectId,
+      values: { status: 'Installation Completed' },
+    });
+    expect(await status()).toEqual({
+      project: 'Completed',
+      installation: 'Installation Completed',
+    });
+    expect((await api.projects.get({ id: projectId })).stage).toBe('Completed');
+
+    await api.projects.setStatus({ id: projectId, status: 'Active' });
+    expect(await status()).toEqual({ project: 'Active', installation: 'Unscheduled' });
+
+    await api.projects.setStatus({ id: projectId, status: 'Lost' });
+    expect(await status()).toEqual({ project: 'Lost', installation: 'Cancelled' });
+
+    await api.projects.setStatus({ id: projectId, status: 'Active' });
+    await api.projects.updateInstallation({ id: projectId, values: { status: 'Cancelled' } });
+    expect(await status()).toEqual({ project: 'Lost', installation: 'Cancelled' });
+
+    // Straight in the database, without the API.
+    await db.execute(
+      sql`update project_installation set status = 'Closed' where project_id = ${projectId}`,
+    );
+    expect(await status()).toEqual({ project: 'Closed', installation: 'Closed' });
+    await db.execute(sql`update projects set status = 'Completed' where id = ${projectId}`);
+    expect(await status()).toEqual({
+      project: 'Completed',
+      installation: 'Installation Completed',
+    });
+
+    expect((await timeline()).map((a) => a.subject)).toContain(
+      'Status changed from Active to Lost (linked to the installation status)',
+    );
+  });
+
+  it('installer invoice: its own box, saved on the installation row', async () => {
+    const api = as();
+    await api.projects.updateInstallerInvoice({
+      id: projectId,
+      values: {
+        installerInvoiceNumber: 'INV-9',
+        installerInvoiceAmountAud: '2400',
+        installerInvoiceDate: '2026-10-22',
+      },
+    });
+    expect((await api.projects.get({ id: projectId })).installation).toMatchObject({
+      installerInvoiceNumber: 'INV-9',
+      installerInvoiceAmountAud: '2400.00',
+      status: null,
+    });
   });
 
   it('STC claim: totals are worked out on the server', async () => {
