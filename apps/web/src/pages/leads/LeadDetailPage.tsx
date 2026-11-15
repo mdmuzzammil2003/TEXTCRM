@@ -312,8 +312,9 @@ function LeadView({ lead }: { lead: Lead }) {
         </Alert>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6">
+      {/* Left: the lead's details. Right: what happened on it (activity, messages, files, history). */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Customer & property</CardTitle>
@@ -367,9 +368,11 @@ function LeadView({ lead }: { lead: Lead }) {
               />
             </CardContent>
           </Card>
+          <SystemCard lead={lead} editable={editable} />
+          <PricingCard lead={lead} editable={editable} />
           <Card>
             <CardHeader>
-              <CardTitle>Lead</CardTitle>
+              <CardTitle>Lead details</CardTitle>
             </CardHeader>
             <CardContent className="py-1">
               <DetailList
@@ -431,11 +434,7 @@ function LeadView({ lead }: { lead: Lead }) {
           )}
         </div>
 
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          <div className="grid items-start gap-6 xl:grid-cols-2">
-            <SystemCard lead={lead} editable={editable} />
-            <PricingCard lead={lead} editable={editable} />
-          </div>
+        <div className="flex min-w-0 flex-col gap-6">
           <Card>
             <CardContent>
               <Tabs defaultValue="activity">
@@ -523,9 +522,9 @@ export function LeadDetailPage() {
         <BackLink />
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-10" />
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-80" />
-          <Skeleton className="h-80 lg:col-span-2" />
+          <Skeleton className="h-80" />
         </div>
       </div>
     );
