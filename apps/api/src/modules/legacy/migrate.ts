@@ -140,7 +140,6 @@ function leadData(lead: LegacyLead): Record<string, string> {
     systemSizeKw: lead.systemSizeKw,
     batteryRequired:
       lead.batteryRequired === undefined ? undefined : lead.batteryRequired ? 'Yes' : 'No',
-    propertyType: lead.propertyType,
     roofType: lead.roofType,
     systemPriceAud: lead.systemPrice,
     sellingPriceAud: lead.sellingPrice,

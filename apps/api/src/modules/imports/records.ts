@@ -130,7 +130,6 @@ export type LeadRecord = {
   system: {
     systemSizeKw?: string | null;
     batteryRequired?: boolean;
-    propertyType?: string | null;
     roofType?: string | null;
   };
   pricing: {
@@ -222,7 +221,6 @@ export function toLeadRecord(data: Record<string, string>, lookups: Lookups): Re
     else if (battery !== null) system.batteryRequired = battery;
   }
   if (data.roofType) system.roofType = option('roofType', lookups.roofTypes, 'Roof type');
-  if (data.propertyType) system.propertyType = data.propertyType.slice(0, 100);
 
   const money: LeadRecord['pricing'] = {};
   for (const key of ['systemPriceAud', 'sellingPriceAud', 'depositAud'] as const) {

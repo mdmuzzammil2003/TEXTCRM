@@ -63,7 +63,6 @@ export async function loadLeadDetails(db: Db, leadId: string) {
       ? {
           systemSizeKw: system.systemSizeKw,
           batteryRequired: system.batteryRequired,
-          propertyType: system.propertyType,
           roofType: system.roofType,
           houseStorey: system.houseStorey,
           phase: system.phase,

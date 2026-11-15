@@ -80,7 +80,6 @@ export const leadSystemSchema = z
   .object({
     systemSizeKw: decimalField({ max: 1000, scale: 2, label: 'the system size' }),
     batteryRequired: z.boolean().default(false),
-    propertyType: optionalText(100),
     /** Option values from `roofTypes`, `houseStoreys`, `phases`. */
     roofType: optionalText(100),
     houseStorey: optionalText(100),

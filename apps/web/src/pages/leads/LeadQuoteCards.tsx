@@ -120,7 +120,6 @@ function SystemForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
       batteryCount: system?.batteryCount ?? '',
       systemSizeKw: system?.systemSizeKw ?? '',
       batteryRequired: system?.batteryRequired ?? false,
-      propertyType: system?.propertyType ?? '',
       roofType: system?.roofType ?? '',
       houseStorey: system?.houseStorey ?? '',
       phase: system?.phase ?? '',
@@ -273,15 +272,6 @@ function SystemForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
         </FormField>
         <FormField
           control={control}
-          name="propertyType"
-          label="Property"
-          hint="e.g. House, Townhouse, Farm"
-          className="sm:col-span-4"
-        >
-          {(field, props) => <Input {...props} {...textInput(field)} />}
-        </FormField>
-        <FormField
-          control={control}
           name="existingSystemDetails"
           label="Existing system"
           className="sm:col-span-4"
@@ -343,8 +333,8 @@ export function SystemCard({ lead, editable }: { lead: Lead; editable: boolean }
               },
               { label: 'System size', value: system.systemSizeKw && `${system.systemSizeKw} kW` },
               {
-                label: 'Property',
-                value: [system.propertyType, system.roofType, system.houseStorey, system.phase]
+                label: 'Roof & phase',
+                value: [system.roofType, system.houseStorey, system.phase]
                   .filter(Boolean)
                   .join(' · '),
               },

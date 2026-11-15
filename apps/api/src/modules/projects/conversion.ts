@@ -231,7 +231,6 @@ export async function convertLead(
       area: lead.area,
       nearestBigCity: lead.nearestBigCity,
       addressVerified: lead.addressVerified,
-      propertyType: system?.propertyType ?? null,
       isPrimary: addresses.length === 0,
     });
   }

@@ -81,7 +81,6 @@ export const LEAD_IMPORT_FIELDS: readonly ImportField[] = [
   ...PERSON_FIELDS,
   field('systemSizeKw', 'System Size kW', ['system size', 'kw', 'system kw']),
   field('batteryRequired', 'Battery Required', ['battery'], 'Yes / No'),
-  field('propertyType', 'Property Type', []),
   field('roofType', 'Roof Type', ['roof']),
   field('systemPriceAud', 'System Price AUD', ['system price']),
   field('sellingPriceAud', 'Selling Price AUD', ['selling price', 'price']),

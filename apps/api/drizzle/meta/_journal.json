@@ -120,6 +120,13 @@
       "when": 1794674570113,
       "tag": "0016_project_drop_single_inverter",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794753149397,
+      "tag": "0017_lead_drop_property_type",
+      "breakpoints": true
     }
   ]
 }

@@ -113,7 +113,6 @@ export const leadSystemRequirements = pgTable(
       .references(() => leads.id, { onDelete: 'cascade' }),
     systemSizeKw: numeric({ precision: 8, scale: 2 }),
     batteryRequired: boolean().notNull().default(false),
-    propertyType: text(),
     /** Option values from `roofTypes`, `houseStoreys`, `phases`. */
     roofType: text(),
     houseStorey: text(),
