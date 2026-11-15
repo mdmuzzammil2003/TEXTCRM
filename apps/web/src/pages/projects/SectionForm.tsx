@@ -1,3 +1,4 @@
+import { TagsInput } from '../../components/TagsInput.tsx';
 import { Pencil } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import {
@@ -135,6 +136,8 @@ export type FieldSpec<T extends FieldValues> =
   | { heading: string }
   | (Common<T> & { kind: 'text' | 'money' | 'count' | 'date'; placeholder?: string })
   | (Common<T> & { kind: 'checkbox'; text: string })
+  /** Several values as tags (Space adds one); the value is one space-separated string. */
+  | (Common<T> & { kind: 'tags'; placeholder?: string })
   /** A dropdown from an option list (Settings → option lists). */
   | (Common<T> & { kind: 'option'; list: string })
   /** A dropdown of records (people, installers). */
@@ -203,6 +206,17 @@ export function SectionForm<TInput extends FieldValues, TOutput>({
               return <Input {...props} {...textInput(field)} placeholder={spec.placeholder} />;
             case 'money':
               return <Input {...props} {...textInput(field)} inputMode="decimal" placeholder="$" />;
+            case 'tags':
+              return (
+                <TagsInput
+                  props={props}
+                  name={field.name}
+                  value={typeof field.value === 'string' ? field.value : ''}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder={spec.placeholder}
+                />
+              );
             case 'count':
               return (
                 <Input

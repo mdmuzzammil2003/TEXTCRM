@@ -359,7 +359,12 @@ export function FinanceCard({ project, editable }: CardProps) {
 
 const WAREHOUSE_FIELDS: FieldSpec<WarehouseInput>[] = [
   { name: 'warehouse', label: 'Warehouse', kind: 'option', list: 'warehouses' },
-  { name: 'salesOrderNumber', label: 'Sales order no.', kind: 'text' },
+  {
+    name: 'salesOrderNumbers',
+    label: 'Sales order no.',
+    kind: 'tags',
+    placeholder: 'SO-1001 — press Space to add another',
+  },
   { name: 'stockStatus', label: 'Stock status', kind: 'option', list: 'stockStatuses' },
   {
     name: 'stockUsedProject',
@@ -389,7 +394,7 @@ export function WarehouseCard({ project, editable }: CardProps) {
           resolver={zodResolver(warehouseSchema)}
           defaultValues={{
             warehouse: warehouse?.warehouse ?? '',
-            salesOrderNumber: warehouse?.salesOrderNumber ?? '',
+            salesOrderNumbers: warehouse?.salesOrderNumbers.join(' ') ?? '',
             stockStatus: warehouse?.stockStatus ?? '',
             stockUsedProject: warehouse?.stockUsedProject ?? '',
             invoiceNumber: warehouse?.invoiceNumber ?? '',
@@ -409,7 +414,16 @@ export function WarehouseCard({ project, editable }: CardProps) {
         <DetailList
           items={[
             { label: 'Warehouse', value: warehouse.warehouse },
-            { label: 'Sales order', value: warehouse.salesOrderNumber },
+            {
+              label: warehouse.salesOrderNumbers.length > 1 ? 'Sales orders' : 'Sales order',
+              value: warehouse.salesOrderNumbers.length > 0 && (
+                <span className="flex flex-wrap gap-1.5">
+                  {warehouse.salesOrderNumbers.map((number) => (
+                    <Badge key={number}>{number}</Badge>
+                  ))}
+                </span>
+              ),
+            },
             { label: 'Stock note', value: warehouse.stockUsedProject },
             {
               label: 'Invoice',

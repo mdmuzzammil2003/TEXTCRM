@@ -1,0 +1,1 @@
+ALTER TABLE "project_warehouse" DROP COLUMN "sales_order_number";

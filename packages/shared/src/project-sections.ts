@@ -244,10 +244,27 @@ export type FinanceValues = z.output<typeof financeSchema>;
 
 // ── Warehouse & stock ────────────────────────────────────────────────────
 
+/**
+ * A job's sales order numbers. The form sends what was typed as tags (one string, split on spaces,
+ * commas or semicolons); the API also takes a list. Repeats are dropped, order is kept.
+ */
+export const salesOrderNumbersField = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((value) => {
+    const parts = typeof value === 'string' ? value.split(/[\s,;]+/) : (value ?? []);
+    return [...new Set(parts.map((part) => part.trim()).filter(Boolean))];
+  })
+  .pipe(
+    z
+      .array(z.string().max(100, 'A sales order number can be at most 100 characters.'))
+      .max(20, 'A job can have at most 20 sales order numbers.'),
+  );
+
 export const warehouseSchema = z
   .object({
     warehouse: option,
-    salesOrderNumber: reference,
+    salesOrderNumbers: salesOrderNumbersField,
     stockStatus: option,
     stockUsedProject: optionalText(200),
     invoiceNumber: reference,

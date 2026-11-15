@@ -1,109 +1,28 @@
-import { X } from 'lucide-react';
-import { useRef, useState, type KeyboardEvent } from 'react';
-import { cn, type FieldControlProps } from '../ui/index.ts';
+import type { FieldControlProps } from '../ui/index.ts';
+import { TagsInput } from './TagsInput.tsx';
 
-const SEPARATORS = /[\s,;]+/;
 const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-
-/** "a@x.com  b@y.com" → ["a@x.com", "b@y.com"]. */
-function splitEmails(text: string): string[] {
-  return text.split(SEPARATORS).filter(Boolean);
-}
 
 /**
  * Several email addresses in one box. Type an address and press Space (or Enter or comma) and it
  * becomes a tag; the first tag is the primary address, the rest are extra addresses. The value is
- * one space-separated string, which the server splits into primary + extras. An address still
- * being typed is part of the value too, so submitting the form never loses it.
+ * one space-separated string, which the server splits into primary + extras.
  */
-export function EmailTagsInput({
-  value,
-  onChange,
-  onBlur,
-  name,
-  props,
-}: {
+export function EmailTagsInput(props: {
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
   name?: string;
   props: FieldControlProps;
 }) {
-  const all = splitEmails(value);
-  const [typed, setTyped] = useState('');
-  const input = useRef<HTMLInputElement>(null);
-  // The address being typed is the value's last word; drop it if the form changed the value.
-  const draft = typed !== '' && all.at(-1) === typed ? typed : '';
-  const tags = draft ? all.slice(0, -1) : all;
-  const emit = (committed: string[], pending: string) => {
-    onChange([...committed, pending].filter(Boolean).join(' '));
-  };
-
   return (
-    <div
-      onClick={() => input.current?.focus()}
-      className={cn(
-        'flex min-h-8 w-full min-w-0 cursor-text flex-wrap items-center gap-1 rounded-md border border-line-strong bg-surface px-1.5 py-1 text-sm text-fg shadow-xs',
-        'transition-[border-color,box-shadow] duration-100 hover:border-fg-subtle/60 focus-within:border-accent focus-within:ring-3 focus-within:ring-ring',
-        props.invalid && 'border-danger focus-within:ring-danger/25',
-      )}
-    >
-      {tags.map((tag, index) => (
-        <span
-          key={`${tag}-${String(index)}`}
-          title={index === 0 ? 'Primary email' : 'Extra email'}
-          className={cn(
-            'inline-flex max-w-full items-center gap-1 rounded bg-surface-2 py-0.5 pr-0.5 pl-2 text-fg',
-            index === 0 && 'font-medium',
-            !LOOKS_LIKE_EMAIL.test(tag) && 'bg-danger/10 text-danger',
-          )}
-        >
-          <span className="truncate">{tag}</span>
-          <button
-            type="button"
-            aria-label={`Remove ${tag}`}
-            className="rounded p-0.5 text-fg-muted hover:text-fg"
-            onClick={(event) => {
-              event.stopPropagation();
-              onChange(tags.filter((_, i) => i !== index).join(' '));
-            }}
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-      <input
-        ref={input}
-        {...props}
-        name={name}
-        type="text"
-        inputMode="email"
-        autoComplete="off"
-        aria-invalid={props.invalid || undefined}
-        value={draft}
-        placeholder={tags.length === 0 ? 'name@example.com — press Space to add another' : ''}
-        className="min-w-40 flex-1 bg-transparent px-1 outline-none placeholder:text-fg-subtle"
-        onChange={(event) => {
-          const text = event.target.value;
-          // A space, comma or semicolon (or a pasted list) finishes the address before it.
-          const parts = text.split(SEPARATORS);
-          const rest = parts.pop() ?? '';
-          setTyped(rest);
-          emit([...tags, ...parts.filter(Boolean)], rest);
-        }}
-        onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-          if (event.key === 'Enter' && draft) {
-            event.preventDefault();
-            setTyped('');
-          } else if (event.key === 'Backspace' && draft === '' && tags.length > 0) {
-            onChange(tags.slice(0, -1).join(' '));
-          }
-        }}
-        onBlur={() => {
-          setTyped('');
-          onBlur?.();
-        }}
-      />
-    </div>
+    <TagsInput
+      {...props}
+      inputMode="email"
+      placeholder="name@example.com — press Space to add another"
+      tagTitle={(index) => (index === 0 ? 'Primary email' : 'Extra email')}
+      tagClassName={(index) => (index === 0 ? 'font-medium' : undefined)}
+      isValid={(tag) => LOOKS_LIKE_EMAIL.test(tag)}
+    />
   );
 }

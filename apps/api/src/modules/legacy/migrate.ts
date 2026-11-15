@@ -746,7 +746,7 @@ async function migrateProject(
           id: projectId,
           values: {
             warehouse: value('warehouse') ?? null,
-            salesOrderNumber: legacy.salesOrderNo ?? null,
+            salesOrderNumbers: legacy.salesOrderNo ?? undefined,
             stockStatus: legacy.stockStatus ?? null,
             stockUsedProject: legacy.stockUsedProject ?? null,
             invoiceNumber: value('warehouseInvoiceNumber') ?? null,

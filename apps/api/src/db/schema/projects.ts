@@ -181,7 +181,8 @@ export const projectFinance = pgTable('project_finance', {
 export const projectWarehouse = pgTable('project_warehouse', {
   projectId: projectIdPk(),
   warehouse: text(),
-  salesOrderNumber: text(),
+  /** Every sales order of the job (a job can need more than one). */
+  salesOrderNumbers: text().array().notNull().default([]),
   invoiceDate: day(),
   invoiceNumber: text(),
   invoiceAmountAud: money(),

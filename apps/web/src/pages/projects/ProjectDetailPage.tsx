@@ -113,7 +113,7 @@ const PROJECT_FIELD_LABELS: Record<string, string> = {
   approvedAmountAud: 'Finance approved amount',
   // Warehouse
   warehouse: 'Warehouse',
-  salesOrderNumber: 'Sales order',
+  salesOrderNumbers: 'Sales orders',
   stockStatus: 'Stock status',
   stockUsedProject: 'Stock note',
   invoiceNumber: 'Warehouse invoice no.',

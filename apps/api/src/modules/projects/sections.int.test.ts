@@ -255,7 +255,7 @@ describe('project workspace sections (Step 2.7)', () => {
       id: projectId,
       values: {
         warehouse: 'Sydney Central DC (Alexandria)',
-        salesOrderNumber: 'SO-1001',
+        salesOrderNumbers: 'SO-1001',
         stockStatus: 'Allocated to Job',
       },
     });
@@ -263,7 +263,7 @@ describe('project workspace sections (Step 2.7)', () => {
       id: projectId,
       values: {
         warehouse: 'Sydney Central DC (Alexandria)',
-        salesOrderNumber: 'SO-1001',
+        salesOrderNumbers: 'SO-1001',
         stockStatus: 'Dispatched to Site',
       },
     });
@@ -276,6 +276,37 @@ describe('project workspace sections (Step 2.7)', () => {
       api.projects.updateWarehouse({
         id: projectId,
         values: { invoiceDate: '2026-10-10', invoicePaidDate: '2026-10-01' },
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('warehouse: several sales order numbers, typed as tags, kept in order without repeats', async () => {
+    const api = as();
+    await api.projects.updateWarehouse({
+      id: projectId,
+      values: { salesOrderNumbers: ' SO-2001, SO-2002;SO-2001  SO-2003 ' },
+    });
+    expect((await api.projects.get({ id: projectId })).warehouse?.salesOrderNumbers).toEqual([
+      'SO-2001',
+      'SO-2002',
+      'SO-2003',
+    ]);
+    // The same list again is no change; removing one is audited as a list change.
+    const before = (await audits('update_warehouse')).length;
+    await api.projects.updateWarehouse({
+      id: projectId,
+      values: { salesOrderNumbers: ['SO-2001', 'SO-2002', 'SO-2003'] },
+    });
+    expect(await audits('update_warehouse')).toHaveLength(before);
+    await api.projects.updateWarehouse({ id: projectId, values: { salesOrderNumbers: 'SO-2003' } });
+    expect((await audits('update_warehouse')).map((a) => a.changes)).toContainEqual({
+      before: { salesOrderNumbers: ['SO-2001', 'SO-2002', 'SO-2003'] },
+      after: { salesOrderNumbers: ['SO-2003'] },
+    });
+    await expect(
+      api.projects.updateWarehouse({
+        id: projectId,
+        values: { salesOrderNumbers: 'x'.repeat(101) },
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
