@@ -115,9 +115,10 @@ function Preview({ leadId, onDone }: { leadId: string; onDone: () => void }) {
               />
             </div>
             <p className="text-sm text-fg-muted">
-              The lead will be marked{' '}
-              <span className="font-medium text-fg">Converted to Project</span> and can't be
-              converted again. Files stay on the lead and show on the project too.
+              This lead will be marked as{' '}
+              <span className="font-medium text-fg">Converted to Project</span> and cannot be
+              reverted back. Existing files and data will remain on the lead and will also be
+              visible in the project.
             </p>
           </>
         )}
