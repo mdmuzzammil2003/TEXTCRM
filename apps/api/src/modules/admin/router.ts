@@ -300,12 +300,13 @@ const rolesRouter = router({
     const rows = await ctx.db
       .select({
         role: roles,
-        users: sql<number>`(select count(*)::int from users u where u.role_id = ${roles.id} and u.is_active)`,
+        users: sql<number>`(select count(*)::int from users u where u.role_id = "roles"."id" and u.is_active)`,
+        assigned: sql<number>`(select count(*)::int from users u where u.role_id = "roles"."id")`,
       })
       .from(roles)
       .orderBy(desc(roles.isSystem), asc(roles.name));
     return Promise.all(
-      rows.map(async ({ role, users: activeUsers }) => ({
+      rows.map(async ({ role, users: activeUsers, assigned }) => ({
         id: role.id,
         key: role.key,
         name: role.name,
@@ -313,6 +314,8 @@ const rolesRouter = router({
         isSystem: role.isSystem,
         locked: role.key === ADMIN_ROLE,
         activeUsers,
+        /** Everyone with the role, deactivated people too (they must move before a delete). */
+        assignedUsers: assigned,
         permissions: await roleMatrix(ctx.db, role.id),
       })),
     );
@@ -359,9 +362,16 @@ const rolesRouter = router({
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
         const role = await loadRole(tx, input.id);
-        if (role.isSystem && role.name !== input.values.name) {
-          throw bad('Built-in roles keep their names. You can change the description.');
+        if (role.key === ADMIN_ROLE) {
+          throw bad('The Admin role can’t be changed — the CRM relies on it.');
         }
+        const [clash] = await tx
+          .select({ id: roles.id })
+          .from(roles)
+          .where(
+            and(sql`lower(${roles.name}) = lower(${input.values.name})`, ne(roles.id, role.id)),
+          );
+        if (clash) throw conflict(`There is already a role called "${input.values.name}".`);
         const changes = diff(role, input.values);
         if (!changes) return { id: role.id };
         await tx.update(roles).set(input.values).where(eq(roles.id, role.id));
@@ -400,20 +410,40 @@ const rolesRouter = router({
       }),
     ),
 
+  /**
+   * Deletes a role (any but Admin). People who have it must move to another role first:
+   * `reassignToRoleId` moves them all in the same transaction.
+   */
   remove: permissionProcedure('roles', 'delete')
-    .input(z.object({ id: z.uuid() }))
+    .input(z.object({ id: z.uuid(), reassignToRoleId: z.uuid().optional() }))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
         const role = await loadRole(tx, input.id);
-        if (role.isSystem) throw bad('Built-in roles can’t be deleted.');
-        const [assigned] = await tx
-          .select({ count: count() })
+        if (role.key === ADMIN_ROLE) {
+          throw bad('The Admin role can’t be deleted — the CRM relies on it.');
+        }
+        const holders = await tx
+          .select({ id: users.id })
           .from(users)
           .where(eq(users.roleId, role.id));
-        if (assigned && assigned.count > 0) {
-          throw bad(
-            `${String(assigned.count)} ${assigned.count === 1 ? 'person has' : 'people have'} this role. Give them another role first.`,
-          );
+        if (holders.length > 0) {
+          if (!input.reassignToRoleId) {
+            throw bad(
+              `${String(holders.length)} ${holders.length === 1 ? 'person has' : 'people have'} this role. Choose another role for them first.`,
+            );
+          }
+          if (input.reassignToRoleId === role.id) throw bad('Choose a different role for them.');
+          const target = await loadRole(tx, input.reassignToRoleId);
+          await tx.update(users).set({ roleId: target.id }).where(eq(users.roleId, role.id));
+          for (const holder of holders) {
+            await recordAudit(tx, actorOf(ctx), {
+              action: 'update',
+              entityType: 'user',
+              entityId: holder.id,
+              before: { roleId: role.id },
+              after: { roleId: target.id },
+            });
+          }
         }
         await tx.delete(roles).where(eq(roles.id, role.id));
         await recordAudit(tx, actorOf(ctx), {

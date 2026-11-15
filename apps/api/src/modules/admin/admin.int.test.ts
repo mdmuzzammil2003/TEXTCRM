@@ -194,9 +194,40 @@ describe('admin settings (Step 2.10)', () => {
         values: { name: 'X', roleId: await roleId('service') },
       });
       await as().admin.roles.remove({ id });
-      await expect(as().admin.roles.remove({ id: await roleId('sales') })).rejects.toThrow(
-        'Built-in roles',
+    });
+
+    it('edits and deletes the built-in roles except Admin; people move to another role first', async () => {
+      const sales = await roleId('sales');
+      const service = await roleId('service');
+      const admin = await roleId('admin');
+      await as().admin.roles.update({
+        id: sales,
+        values: { name: 'Sales team', description: 'Leads and quotes' },
+      });
+      expect((await as().admin.roles.list()).find((r) => r.id === sales)).toMatchObject({
+        name: 'Sales team',
+        description: 'Leads and quotes',
+      });
+      await expect(
+        as().admin.roles.update({ id: sales, values: { name: 'service' } }),
+      ).rejects.toThrow('already a role');
+      await expect(
+        as().admin.roles.update({ id: admin, values: { name: 'Boss' } }),
+      ).rejects.toThrow('Admin role');
+      await expect(as().admin.roles.remove({ id: admin })).rejects.toThrow('Admin role');
+
+      const { id: person } = await as().admin.users.invite({
+        email: 'seller@makemysolar.com.au',
+        name: 'Seller',
+        roleId: sales,
+      });
+      expect((await as().admin.roles.list()).find((r) => r.id === sales)?.assignedUsers).toBe(1);
+      await expect(as().admin.roles.remove({ id: sales })).rejects.toThrow(
+        '1 person has this role',
       );
+      await as().admin.roles.remove({ id: sales, reassignToRoleId: service });
+      expect((await as().admin.roles.list()).some((r) => r.id === sales)).toBe(false);
+      expect((await as().admin.users.list()).find((u) => u.id === person)?.roleKey).toBe('service');
     });
   });
 

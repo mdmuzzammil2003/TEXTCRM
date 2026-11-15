@@ -7,7 +7,7 @@ import {
   type PermissionMatrix,
 } from '@mms/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, Plus, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ConfirmDialog } from '../../../components/ConfirmDialog.tsx';
 import { PageHeader } from '../../../components/PageHeader.tsx';
@@ -261,6 +261,84 @@ function NewRoleDialog({
   );
 }
 
+/** Rename a role or change what it's for (every role but Admin). */
+function EditRoleDialog({ role, onClose }: { role: Role | null; onClose: () => void }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const update = useMutation(trpc.admin.roles.update.mutationOptions());
+  const [name, setName] = useState(role?.name ?? '');
+  const [description, setDescription] = useState(role?.description ?? '');
+  return (
+    <Dialog
+      open={role !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        title={`Edit ${role?.name ?? 'role'}`}
+        description="Its permissions are edited on the page."
+      >
+        <form
+          className="contents"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!role) return;
+            update
+              .mutateAsync({ id: role.id, values: { name, description } })
+              .then(async () => {
+                await queryClient.invalidateQueries(trpc.admin.roles.pathFilter());
+                toast({ title: 'Role saved', tone: 'success' });
+                onClose();
+              })
+              .catch(() => undefined);
+          }}
+        >
+          <DialogBody className="flex flex-col gap-4">
+            {update.isError && <Alert tone="danger">{errorMessage(update.error)}</Alert>}
+            <Field label="Name" required>
+              {(props) => (
+                <Input
+                  {...props}
+                  value={name}
+                  autoFocus
+                  onChange={(event) => {
+                    setName(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+            <Field label="What it's for">
+              {(props) => (
+                <Input
+                  {...props}
+                  value={description}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={update.isPending}
+              disabled={!name.trim()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Settings → Roles & permissions (Step 2.10): the §1.2 matrix, enforced on the server. */
 export function RolesPage() {
   const trpc = useTRPC();
@@ -271,7 +349,10 @@ export function RolesPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Role | null>(null);
+  const [editing, setEditing] = useState<Role | null>(null);
+  const [moveTo, setMoveTo] = useState('');
   const roles = query.data ?? [];
+  const moveChoices = roles.filter((r) => r.id !== deleting?.id);
   const role = roles.find((r) => r.id === selected) ?? roles[0];
 
   return (
@@ -322,12 +403,25 @@ export function RolesPage() {
                         <span className="text-xs text-fg-muted tabular-nums">{r.activeUsers}</span>
                       </span>
                     </button>
-                    {!r.isSystem && can('roles', 'delete') && (
+                    {!r.locked && can('roles', 'edit') && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Edit ${r.name}`}
+                        onClick={() => {
+                          setEditing(r);
+                        }}
+                      >
+                        <Pencil />
+                      </Button>
+                    )}
+                    {!r.locked && can('roles', 'delete') && (
                       <Button
                         size="sm"
                         variant="ghost"
                         aria-label={`Delete ${r.name}`}
                         onClick={() => {
+                          setMoveTo('');
                           setDeleting(r);
                         }}
                       >
@@ -363,15 +457,51 @@ export function RolesPage() {
           if (!open) setDeleting(null);
         }}
         title={`Delete the ${deleting?.name ?? ''} role?`}
-        description="Only a role nobody has can be deleted."
+        description="Are you sure you want to delete this role? Users with this role will need to be reassigned."
         confirmLabel="Delete role"
         destructive
+        confirmDisabled={(deleting?.assignedUsers ?? 0) > 0 && !moveTo}
         onConfirm={async () => {
           if (!deleting) return;
-          await remove.mutateAsync({ id: deleting.id });
-          await queryClient.invalidateQueries(trpc.admin.roles.pathFilter());
+          await remove.mutateAsync({
+            id: deleting.id,
+            reassignToRoleId: deleting.assignedUsers > 0 ? moveTo : undefined,
+          });
+          await Promise.all([
+            queryClient.invalidateQueries(trpc.admin.roles.pathFilter()),
+            queryClient.invalidateQueries(trpc.admin.users.pathFilter()),
+          ]);
           setSelected(null);
           toast({ title: 'Role deleted', tone: 'success' });
+        }}
+      >
+        {deleting && deleting.assignedUsers > 0 && (
+          <>
+            <Alert tone="warning">
+              {deleting.assignedUsers === 1
+                ? '1 person has this role.'
+                : `${String(deleting.assignedUsers)} people have this role.`}{' '}
+              Choose the role they move to before deleting it.
+            </Alert>
+            <Field label="Move them to" required>
+              {(props) => (
+                <Select
+                  {...props}
+                  value={moveTo}
+                  onValueChange={setMoveTo}
+                  placeholder="Choose a role"
+                  options={moveChoices.map((r) => ({ value: r.id, label: r.name }))}
+                />
+              )}
+            </Field>
+          </>
+        )}
+      </ConfirmDialog>
+      <EditRoleDialog
+        key={editing?.id ?? 'none'}
+        role={editing}
+        onClose={() => {
+          setEditing(null);
         }}
       />
     </div>

@@ -10,6 +10,8 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   destructive = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
 }: {
   open: boolean;
@@ -18,6 +20,9 @@ export function ConfirmDialog({
   description: ReactNode;
   confirmLabel: string;
   destructive?: boolean;
+  confirmDisabled?: boolean;
+  /** Extra content (a warning, a choice) shown above the buttons. */
+  children?: ReactNode;
   onConfirm: () => Promise<unknown>;
 }) {
   const [pending, setPending] = useState(false);
@@ -45,9 +50,10 @@ export function ConfirmDialog({
       }}
     >
       <DialogContent title={title} description={description} className="max-w-md">
-        {error ? (
-          <DialogBody>
-            <Alert tone="danger">{error}</Alert>
+        {error || children ? (
+          <DialogBody className="flex flex-col gap-3">
+            {children}
+            {error && <Alert tone="danger">{error}</Alert>}
           </DialogBody>
         ) : (
           <div className="h-4" />
@@ -64,6 +70,7 @@ export function ConfirmDialog({
           <Button
             variant={destructive ? 'danger' : 'primary'}
             loading={pending}
+            disabled={confirmDisabled}
             onClick={() => void confirm()}
           >
             {confirmLabel}

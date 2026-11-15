@@ -91,10 +91,13 @@ async function inChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown[]>
 }
 
 async function seedRoles(tx: Tx): Promise<Pick<SeedSummary, 'roles' | 'rolePermissions'>> {
+  // The default roles are created on a new database only: roles edited or deleted in
+  // Settings stay that way when the seed runs again.
+  const fresh = (await tx.$count(roles)) === 0;
   const insertedRoles = await tx
     .insert(roles)
     .values(
-      DEFAULT_ROLES.map((r) => ({
+      (fresh ? DEFAULT_ROLES : DEFAULT_ROLES.filter((r) => r.key === 'admin')).map((r) => ({
         key: r.key,
         name: r.name,
         description: r.description,
@@ -117,7 +120,7 @@ async function seedRoles(tx: Tx): Promise<Pick<SeedSummary, 'roles' | 'rolePermi
 
   const permissionRows = DEFAULT_ROLES.flatMap((role) => {
     const roleId = roleIdByKey.get(role.key);
-    if (!roleId) throw new Error(`Role ${role.key} missing after insert`);
+    if (!roleId) return [];
     return FEATURES.map((feature) => {
       const p = role.permissions[feature] ?? NO_ACCESS;
       return {
