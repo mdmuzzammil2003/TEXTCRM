@@ -13,7 +13,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog.tsx';
 import { PageHeader } from '../../../components/PageHeader.tsx';
 import { When } from '../../../components/When.tsx';
 import { errorMessage } from '../../../lib/errors.ts';
-import { useCan } from '../../../lib/hooks.ts';
+import { useCan, useIsAdmin } from '../../../lib/hooks.ts';
 import { useTRPC, type RouterOutputs } from '../../../lib/trpc.ts';
 import {
   Alert,
@@ -237,6 +237,14 @@ export function UsersPage() {
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deactivating, setDeactivating] = useState<User | null>(null);
+  const [purging, setPurging] = useState<User | null>(null);
+  const isAdmin = useIsAdmin();
+  const purge = useMutation(trpc.admin.users.permanentlyDelete.mutationOptions());
+  const links = useQuery({
+    ...trpc.admin.users.deletePreview.queryOptions({ id: purging?.id ?? '' }),
+    enabled: purging !== null,
+  });
+  const linked = (links.data?.links.length ?? 0) > 0;
   const preview = useQuery({
     ...trpc.admin.users.deactivationPreview.queryOptions({ id: deactivating?.id ?? '' }),
     enabled: deactivating !== null,
@@ -343,7 +351,7 @@ export function UsersPage() {
                       )}
                     </TableCell>
                     <TableCell end>
-                      {can('users', 'edit') && (
+                      {(can('users', 'edit') || isAdmin) && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <IconButton size="sm" label={`Actions for ${user.name}`}>
@@ -375,6 +383,16 @@ export function UsersPage() {
                                 }}
                               >
                                 Reactivate
+                              </DropdownMenuItem>
+                            )}
+                            {isAdmin && !user.isYou && (
+                              <DropdownMenuItem
+                                className="text-danger-text"
+                                onSelect={() => {
+                                  setPurging(user);
+                                }}
+                              >
+                                Delete
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -454,6 +472,43 @@ export function UsersPage() {
           });
         }}
       />
+      <ConfirmDialog
+        open={purging !== null}
+        onOpenChange={(open) => {
+          if (!open) setPurging(null);
+        }}
+        title={`Permanently delete ${purging?.name ?? ''}?`}
+        description="This is permanent and cannot be undone. Their sign-in access is removed for good."
+        confirmLabel="Delete permanently"
+        destructive
+        confirmDisabled={!links.data || linked}
+        onConfirm={async () => {
+          if (!purging) return;
+          await purge.mutateAsync({ id: purging.id });
+          await queryClient.invalidateQueries(trpc.admin.users.pathFilter());
+          toast({ title: `${purging.name} was permanently deleted`, tone: 'success' });
+        }}
+      >
+        {links.isPending ? (
+          <p className="text-sm text-fg-muted">Checking their records…</p>
+        ) : linked ? (
+          <Alert tone="warning">
+            This user has linked records and cannot be deleted. Deactivate them instead.
+            <ul className="mt-1 list-disc pl-5">
+              {links.data?.links.map((link) => (
+                <li key={link.label}>
+                  {link.n} {link.label}
+                </li>
+              ))}
+            </ul>
+          </Alert>
+        ) : (
+          <p className="text-sm text-fg-muted">
+            They have no records in the CRM. Their email drafts, signature and saved views are
+            deleted with them.
+          </p>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

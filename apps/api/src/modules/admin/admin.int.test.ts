@@ -1,8 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { emptyPermissionMatrix, type PermissionMatrix } from '@mms/shared';
 import type { SessionRevoker } from '../../auth/types.ts';
-import { hardwarePanels, roles, users } from '../../db/schema/index.ts';
+import { auditLog, hardwarePanels, roles, users } from '../../db/schema/index.ts';
 import { loadLegacySeedInput, seed } from '../../db/seed.ts';
 import type { JobQueue } from '../../jobs/queue.ts';
 import type { Storage } from '../../storage/storage.ts';
@@ -12,6 +12,7 @@ import { appRouter } from '../../trpc/router.ts';
 import { createCallerFactory } from '../../trpc/trpc.ts';
 import { upsertUser } from '../../users/upsert-user.ts';
 import { runImport } from '../imports/service.ts';
+import { USER_LINKS } from './user-links.ts';
 
 const createCaller = createCallerFactory(appRouter);
 
@@ -146,6 +147,106 @@ describe('admin settings (Step 2.10)', () => {
       const sales = emptyPermissionMatrix();
       sales.leads.view = true;
       await expect(as(sales).admin.users.list()).rejects.toThrow('does not allow');
+    });
+  });
+
+  describe('permanently deleting a user', () => {
+    const asRole = (key: string, id = adminId) =>
+      createCaller(
+        fakeContext(
+          {
+            status: 'authenticated',
+            user: fakeUser({ id, role: { key, name: key }, permissions: allPermissions() }),
+            firebaseUid: 'uid',
+          },
+          { db, sessions, storage, jobs },
+        ),
+      );
+    const invite = async (email: string, role = 'sales') =>
+      (
+        await as().admin.users.invite({
+          email,
+          name: email.split('@')[0] ?? 'x',
+          roleId: await roleId(role),
+        })
+      ).id;
+    const linkedMessage =
+      'This user has linked records (leads, audit logs, etc.) and cannot be deleted. Deactivate them instead.';
+
+    it('deletes someone with no records (invited by mistake); the audit log keeps a record', async () => {
+      const id = await invite('oops@makemysolar.com.au');
+      expect(await asRole('admin').admin.users.deletePreview({ id })).toEqual({ links: [] });
+      await asRole('admin').admin.users.permanentlyDelete({ id });
+      expect(await db.select().from(users).where(eq(users.id, id))).toEqual([]);
+      const [purge] = await db
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.entityId, id), eq(auditLog.action, 'purge')));
+      expect(purge?.actorUserId).toBe(adminId);
+    });
+
+    it('refuses someone linked to records, and says what they are linked to', async () => {
+      const id = await invite('seller@makemysolar.com.au');
+      await as().leads.create({
+        values: { firstName: 'Olivia', email: 'olivia@example.com', ownerUserId: id },
+      });
+      expect((await asRole('admin').admin.users.deletePreview({ id })).links).toContainEqual({
+        label: 'leads owned',
+        n: 1,
+      });
+      await expect(asRole('admin').admin.users.permanentlyDelete({ id })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: linkedMessage,
+      });
+      // The admin has audit log entries of their own.
+      const other = await invite('second-admin@makemysolar.com.au', 'admin');
+      await expect(
+        asRole('admin', other).admin.users.permanentlyDelete({ id: adminId }),
+      ).rejects.toMatchObject({ message: linkedMessage });
+      expect(await db.select().from(users).where(eq(users.id, id))).toHaveLength(1);
+    });
+
+    it('only an Admin, never yourself, never the last active admin', async () => {
+      const id = await invite('nobody@makemysolar.com.au');
+      for (const key of ['manager', 'sales', 'operations', 'service']) {
+        await expect(asRole(key).admin.users.permanentlyDelete({ id })).rejects.toMatchObject({
+          code: 'FORBIDDEN',
+        });
+        await expect(asRole(key).admin.users.deletePreview({ id })).rejects.toMatchObject({
+          code: 'FORBIDDEN',
+        });
+      }
+      await expect(asRole('admin', id).admin.users.permanentlyDelete({ id })).rejects.toThrow(
+        "You can't delete yourself.",
+      );
+      // A fresh admin with no records is the only active admin once Micky is a manager.
+      const soleAdmin = await invite('boss@makemysolar.com.au', 'admin');
+      await db
+        .update(users)
+        .set({ roleId: await roleId('manager') })
+        .where(eq(users.id, adminId));
+      await expect(
+        asRole('admin').admin.users.permanentlyDelete({ id: soleAdmin }),
+      ).rejects.toThrow('only active admin');
+      expect(await db.select().from(users).where(eq(users.id, soleAdmin))).toHaveLength(1);
+    });
+
+    it('checks every foreign key to users: each is either a linked record or a personal setting', async () => {
+      // Deleted with the user on purpose (ON DELETE CASCADE): their own settings.
+      const personal = [
+        'email_drafts.user_id',
+        'email_signatures.user_id',
+        'integration_connections.user_id',
+        'integration_oauth_states.user_id',
+        'saved_views.user_id',
+      ];
+      const result = await db.execute<{ fk: string }>(sql`
+        select c.conrelid::regclass::text || '.' || a.attname as fk
+        from pg_constraint c
+        join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+        where c.contype = 'f' and c.confrelid = 'users'::regclass`);
+      const known = [...USER_LINKS.map((l) => `${l.table}.${l.column}`), ...personal].sort();
+      expect(result.rows.map((row) => row.fk).sort()).toEqual(known);
     });
   });
 

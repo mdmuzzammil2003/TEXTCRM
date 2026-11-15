@@ -108,6 +108,76 @@ describe('admin settings', () => {
     });
   });
 
+  it('Admin deletes a user with no records; a linked user is refused before any call', async () => {
+    const calls: TrpcCall[] = [];
+    const open = async (preview: { links: { label: string; n: number }[] }) => {
+      cleanup();
+      renderPage(<UsersPage />, {
+        path: '/settings/users',
+        auth: signedIn(),
+        calls,
+        responses: {
+          'admin.users.list': users,
+          'admin.users.roleOptions': [],
+          'admin.users.deletePreview': preview,
+          'admin.users.permanentlyDelete': { id: '22222222-2222-4222-8222-222222222222' },
+        },
+      });
+      const table = await screen.findByRole('table', { name: 'Users' });
+      fireEvent.keyDown(within(table).getByRole('button', { name: 'Actions for Simon' }), {
+        key: 'Enter',
+      });
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+      return screen.findByRole('dialog', { name: 'Permanently delete Simon?' });
+    };
+
+    let dialog = await open({ links: [{ label: 'leads owned', n: 4 }] });
+    expect(await within(dialog).findByText('4 leads owned')).toBeDefined();
+    expect(within(dialog).getByText(/This is permanent and cannot be undone/)).toBeDefined();
+    const blocked = within(dialog).getByRole('button', { name: 'Delete permanently' });
+    expect((blocked as HTMLButtonElement).disabled).toBe(true);
+
+    dialog = await open({ links: [] });
+    expect(await within(dialog).findByText(/They have no records in the CRM/)).toBeDefined();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }));
+    await waitFor(() => {
+      expect(calls.find((c) => c.path === 'admin.users.permanentlyDelete')?.input).toEqual({
+        id: '22222222-2222-4222-8222-222222222222',
+      });
+    });
+  });
+
+  it('no Delete for anyone but an Admin, even with every permission', async () => {
+    renderPage(<UsersPage />, {
+      path: '/settings/users',
+      auth: fakeAuth({
+        status: 'signedIn',
+        profile: { ...fullAccessProfile(), role: { key: 'manager', name: 'Manager' } },
+      }),
+      responses: { 'admin.users.list': users, 'admin.users.roleOptions': [] },
+    });
+    const table = await screen.findByRole('table', { name: 'Users' });
+    fireEvent.keyDown(within(table).getByRole('button', { name: 'Actions for Simon' }), {
+      key: 'Enter',
+    });
+    expect(await screen.findByRole('menuitem', { name: 'Deactivate' })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+  });
+
+  it('no Delete for yourself', async () => {
+    renderPage(<UsersPage />, {
+      path: '/settings/users',
+      auth: signedIn(),
+      responses: { 'admin.users.list': users, 'admin.users.roleOptions': [] },
+    });
+    const table = await screen.findByRole('table', { name: 'Users' });
+    fireEvent.keyDown(within(table).getByRole('button', { name: 'Actions for Micky' }), {
+      key: 'Enter',
+    });
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+  });
+
   it('adding a user checks the form before calling the API', async () => {
     const calls: TrpcCall[] = [];
     renderPage(<UsersPage />, {
