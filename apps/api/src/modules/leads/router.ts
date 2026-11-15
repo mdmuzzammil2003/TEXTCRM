@@ -39,7 +39,8 @@ import {
 import type { Db, Tx } from '../../db/client.ts';
 import { activities, contacts, leads, projects, users } from '../../db/schema/index.ts';
 import { projectRef } from '../projects/common.ts';
-import { permissionProcedure, router } from '../../trpc/trpc.ts';
+import { permissionProcedure, protectedProcedure, router } from '../../trpc/trpc.ts';
+import { purgeRecords, removeStoredFiles } from '../purge.ts';
 import { openTasksWhere, logSystemActivity } from '../activities/service.ts';
 import { findMatchingContact } from '../contacts/match.ts';
 import { leadDetailProcedures, loadLeadDetails } from './details.ts';
@@ -664,6 +665,63 @@ export const leadsRouter = router({
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.transaction((tx) => setDeleted(tx, ctx, input.id, true));
+      return { id: input.id };
+    }),
+
+  /**
+   * Admin only: deletes a lead for good, with its timeline entries, files and email drafts
+   * (its SMS and emails stay on the contact). A lead that became a project can't be deleted:
+   * the project would lose where it came from. The audit log keeps a "purge" entry.
+   */
+  permanentlyDelete: protectedProcedure
+    .input(z.object({ id: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role.key !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only Admin can permanently delete leads.',
+        });
+      }
+      const storageKeys = await ctx.db.transaction(async (tx) => {
+        // Locked, so nobody converts it while it's being deleted.
+        const [lead] = await tx.select().from(leads).where(eq(leads.id, input.id)).for('update');
+        if (!lead) throw notFound();
+        const [project] = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.leadId, lead.id))
+          .limit(1);
+        if (project || lead.convertedAt || lead.status === LEAD_CONVERTED) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'This lead is linked to a project and cannot be deleted. Delete the project first or keep the lead.',
+          });
+        }
+        const keys = await purgeRecords(tx, { projectIds: [], leadIds: [lead.id] });
+        await recordAudit(tx, actorOf(ctx), {
+          action: 'purge',
+          entityType: 'lead',
+          entityId: lead.id,
+          before: {
+            leadRef: lead.leadRef,
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            email: lead.email,
+            mobile: lead.mobile,
+            suburb: lead.suburb,
+            status: lead.status,
+          },
+        });
+        return keys;
+      });
+      const filesLeft = await removeStoredFiles(ctx.storage, storageKeys);
+      if (filesLeft.length) {
+        ctx.log.warn(
+          { leadId: input.id, keys: filesLeft },
+          'Stored files of a deleted lead were not removed',
+        );
+      }
       return { id: input.id };
     }),
 

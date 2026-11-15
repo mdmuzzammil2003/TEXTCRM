@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { emptyPermissionMatrix, type LeadInput, type PermissionMatrix } from '@mms/shared';
-import { activities, auditLog, leads } from '../../db/schema/index.ts';
+import { activities, auditLog, files, leads } from '../../db/schema/index.ts';
 import { loadLegacySeedInput, seed } from '../../db/seed.ts';
 import { createTestDb, truncateAll } from '../../test/db.ts';
 import { allPermissions, fakeContext, fakeUser } from '../../test/fakes.ts';
@@ -236,6 +236,72 @@ describe('leads', () => {
     await expect(
       as(simon, emptyPermissionMatrix()).activities.list({ entityType: 'lead', entityId: id }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+  describe('permanent delete (Admin only)', () => {
+    const asRole = (userId: string, key: string) =>
+      createCaller(
+        fakeContext(
+          {
+            status: 'authenticated',
+            user: fakeUser({ id: userId, role: { key, name: key }, permissions: allPermissions() }),
+            firebaseUid: 'uid',
+          },
+          { db },
+        ),
+      );
+
+    it('an Admin deletes a lead for good, with its timeline and files; the audit log keeps a record', async () => {
+      const admin = asRole(micky, 'admin');
+      const { id } = await admin.leads.create({ values: { ...olivia, leadRef: '7001' } });
+      await admin.activities.create({ entityType: 'lead', entityId: id, type: 'note', body: 'Hi' });
+      await db.insert(files).values({
+        entityType: 'lead',
+        entityId: id,
+        category: 'photo',
+        fileName: 'bill.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 10,
+        storageKey: 'leads/x/bill.jpg',
+        status: 'ready',
+      });
+      await admin.leads.remove({ id }); // soft-deleted first: still allowed
+
+      await admin.leads.permanentlyDelete({ id });
+      expect(await db.select().from(leads).where(eq(leads.id, id))).toEqual([]);
+      expect(await db.select().from(activities).where(eq(activities.entityId, id))).toEqual([]);
+      expect(await db.select().from(files).where(eq(files.entityId, id))).toEqual([]);
+      const [purge] = await db
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.entityId, id), eq(auditLog.action, 'purge')));
+      expect(purge?.actorUserId).toBe(micky);
+      await expect(admin.leads.get({ id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      // The Lead ID is free again.
+      await admin.leads.create({ values: { ...olivia, leadRef: '7001' } });
+    });
+
+    it('anyone else is refused, whatever their permissions', async () => {
+      const { id } = await asRole(micky, 'admin').leads.create({ values: olivia });
+      for (const key of ['manager', 'sales', 'operations', 'service']) {
+        await expect(asRole(simon, key).leads.permanentlyDelete({ id })).rejects.toMatchObject({
+          code: 'FORBIDDEN',
+          message: 'Only Admin can permanently delete leads.',
+        });
+      }
+      expect(await db.select().from(leads).where(eq(leads.id, id))).toHaveLength(1);
+    });
+
+    it('a lead that became a project is refused', async () => {
+      const admin = asRole(micky, 'admin');
+      const { id } = await admin.leads.create({ values: { ...olivia, leadRef: '7002' } });
+      await admin.projects.convertLead({ leadId: id });
+      await expect(admin.leads.permanentlyDelete({ id })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message:
+          'This lead is linked to a project and cannot be deleted. Delete the project first or keep the lead.',
+      });
+      expect(await db.select().from(leads).where(eq(leads.id, id))).toHaveLength(1);
+    });
   });
 });
 

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
-import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { loadConfig } from '../config.ts';
 import { createStorage, type Storage } from '../storage/storage.ts';
 import { createDb, type Db, type Tx } from './client.ts';
@@ -16,6 +15,7 @@ import {
   tickets,
 } from './schema/index.ts';
 import { recordAudit, type SystemActor } from '../modules/audit.ts';
+import { linkedTo, purgeRecords, removeStoredFiles } from '../modules/purge.ts';
 
 /**
  * One-off clean-up for the Lead ID rule (a lead needs a Lead ID to become a project, and the
@@ -33,23 +33,6 @@ import { recordAudit, type SystemActor } from '../modules/audit.ts';
  */
 
 const ACTOR: SystemActor = { system: 'system' };
-
-/** A table whose rows belong to a lead or project through entity_type + entity_id. */
-type Linkable = { entityType: AnyPgColumn; entityId: AnyPgColumn };
-
-/** Rows of `table` that belong to one of these projects or leads (none when both are empty). */
-function linkedTo(table: Linkable, projectIds: string[], leadIds: string[]): SQL {
-  return (
-    or(
-      projectIds.length
-        ? and(eq(table.entityType, 'project'), inArray(table.entityId, projectIds))
-        : undefined,
-      leadIds.length
-        ? and(eq(table.entityType, 'lead'), inArray(table.entityId, leadIds))
-        : undefined,
-    ) ?? sql`false`
-  );
-}
 
 export type CleanupPlan = Awaited<ReturnType<typeof planCleanup>>;
 
@@ -85,7 +68,7 @@ export async function planCleanup(db: Db | Tx) {
 
   const projectIds = projectRows.map((p) => p.id);
   const leadIds = leadRows.map((l) => l.id);
-  const on = (table: Linkable) => linkedTo(table, projectIds, leadIds);
+  const on = (table: Parameters<typeof linkedTo>[0]) => linkedTo(table, projectIds, leadIds);
   const count = async (query: Promise<{ n: number }[]>) => (await query)[0]?.n ?? 0;
   const n = sql<number>`count(*)::int`;
   const [activityCount, fileCount, smsCount, emailCount, draftCount, ticketCount] =
@@ -161,26 +144,10 @@ export async function runCleanup(
         `The records without a Lead ID changed since the list was made (fingerprint is now ${plan.fingerprint}, expected ${options.expect}). Nothing was deleted — list them again.`,
       );
     }
-    const projectIds = plan.projects.map((p) => p.id);
-    const leadIds = plan.leads.map((l) => l.id);
-    const on = (table: Linkable) => linkedTo(table, projectIds, leadIds);
-
-    const doomedFiles = await tx
-      .select({ storageKey: files.storageKey, thumbnailKey: files.thumbnailKey })
-      .from(files)
-      .where(on(files));
-    await tx.delete(activities).where(on(activities));
-    await tx.delete(files).where(on(files));
-    await tx.delete(emailDrafts).where(on(emailDrafts));
-    await tx.update(smsMessages).set({ entityType: null, entityId: null }).where(on(smsMessages));
-    await tx
-      .update(emailMessages)
-      .set({ entityType: null, entityId: null })
-      .where(on(emailMessages));
-    // Sections, system design and pricing go with the project (ON DELETE CASCADE); tickets keep
-    // their customer and lose the project link (ON DELETE SET NULL).
-    if (projectIds.length) await tx.delete(projects).where(inArray(projects.id, projectIds));
-    if (leadIds.length) await tx.delete(leads).where(inArray(leads.id, leadIds));
+    const storageKeys = await purgeRecords(tx, {
+      projectIds: plan.projects.map((p) => p.id),
+      leadIds: plan.leads.map((l) => l.id),
+    });
     for (const p of plan.projects) {
       await recordAudit(tx, ACTOR, {
         action: 'purge_no_lead_id',
@@ -197,20 +164,9 @@ export async function runCleanup(
         before: { firstName: l.firstName, lastName: l.lastName, suburb: l.suburb },
       });
     }
-    const storageKeys = doomedFiles.flatMap((f) =>
-      f.thumbnailKey ? [f.storageKey, f.thumbnailKey] : [f.storageKey],
-    );
     return { plan, storageKeys };
   });
-
-  if (storageKeys.length === 0) return { plan, storageKeysLeft: [] };
-  if (!options.storage) return { plan, storageKeysLeft: storageKeys };
-  try {
-    await options.storage.remove(storageKeys);
-    return { plan, storageKeysLeft: [] };
-  } catch {
-    return { plan, storageKeysLeft: storageKeys };
-  }
+  return { plan, storageKeysLeft: await removeStoredFiles(options.storage, storageKeys) };
 }
 
 async function main() {

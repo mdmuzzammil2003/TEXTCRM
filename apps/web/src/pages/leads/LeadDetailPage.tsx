@@ -1,6 +1,6 @@
 import { formatPhone, LEAD_CONVERTED, LEAD_LOST, LEAD_PIPELINE } from '@mms/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
   ArchiveRestore,
   ArrowLeft,
@@ -29,7 +29,7 @@ import { LEAD_FIELD_LABELS } from './lead-labels.ts';
 import { HistoryList } from '../../components/HistoryList.tsx';
 import { errorMessage } from '../../lib/errors.ts';
 import { formatDate, fullName } from '../../lib/format.ts';
-import { useCan, useUsers } from '../../lib/hooks.ts';
+import { useCan, useIsAdmin, useUsers } from '../../lib/hooks.ts';
 import { trpcErrorCode, useTRPC, type RouterOutputs } from '../../lib/trpc.ts';
 import {
   Alert,
@@ -142,6 +142,10 @@ function LeadView({ lead }: { lead: Lead }) {
   const users = useUsers();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const isAdmin = useIsAdmin();
+  const navigate = useNavigate();
+  const purge = useMutation(trpc.leads.permanentlyDelete.mutationOptions());
   const setStatus = useMutation(trpc.leads.setStatus.mutationOptions());
   const assign = useMutation(trpc.leads.assign.mutationOptions());
   const remove = useMutation(trpc.leads.remove.mutationOptions());
@@ -274,6 +278,18 @@ function LeadView({ lead }: { lead: Lead }) {
                   Delete
                 </Button>
               ))}
+            {isAdmin && !lead.project && lead.status !== LEAD_CONVERTED && (
+              <Button
+                variant="ghost"
+                className="text-danger-text"
+                onClick={() => {
+                  setPurging(true);
+                }}
+              >
+                <Trash2 />
+                Delete Lead
+              </Button>
+            )}
             {editable && !lead.project && lead.status !== LEAD_LOST && (
               <ConvertToProjectButton leadId={lead.id} hasLeadRef={Boolean(lead.leadRef)} />
             )}
@@ -494,6 +510,31 @@ function LeadView({ lead }: { lead: Lead }) {
           toast({ title: 'Lead deleted' });
         }}
       />
+      <ConfirmDialog
+        open={purging}
+        onOpenChange={setPurging}
+        title={`Permanently delete ${name}?`}
+        description="This action is permanent and cannot be undone."
+        confirmLabel="Delete permanently"
+        destructive
+        onConfirm={async () => {
+          await purge.mutateAsync({ id: lead.id });
+          await queryClient.invalidateQueries(trpc.leads.pathFilter());
+          toast({ title: `${name} was permanently deleted` });
+          await navigate({ to: '/leads' });
+        }}
+      >
+        <p className="text-sm text-fg-muted">
+          The lead, its timeline, notes, tasks and files are deleted. Its SMS and emails stay on the
+          contact. The audit log keeps a record that it was deleted.
+        </p>
+        {lead.sheetSourceId && (
+          <Alert tone="warning">
+            This lead comes from a live sheet. Remove its row there too, or the next sync creates it
+            again.
+          </Alert>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
