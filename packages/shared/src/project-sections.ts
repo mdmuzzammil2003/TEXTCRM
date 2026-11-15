@@ -365,9 +365,6 @@ export const stcClaimSchema = z
     batteryStcs: stcCount,
     batteryStcsAmountAud: moneyField('the battery STC amount'),
     batteryStcsReceivedDate: optionalDate,
-    adminChargesAud: moneyField('the admin charges'),
-    customerStcRateAud: moneyField('the customer rate'),
-    internalStcRateAud: moneyField('the internal rate'),
   })
   .superRefine((stc, ctx) => {
     notInFuture(ctx, stc.submittedDate, 'submittedDate', 'submitted date');
@@ -376,11 +373,11 @@ export const stcClaimSchema = z
       const path = `${kind}StcsReceivedDate`;
       notInFuture(ctx, received, path, 'received date');
       notBefore(ctx, received, stc.submittedDate, path, 'This is before the submitted date.');
-      if (received && !stc[`${kind}StcsAmountAud`]) {
+      if (received && stc[`${kind}Stcs`] === null && !stc[`${kind}StcsAmountAud`]) {
         ctx.addIssue({
           code: 'custom',
-          path: [`${kind}StcsAmountAud`],
-          message: 'Enter the amount that was received.',
+          path: [`${kind}Stcs`],
+          message: 'Enter the certificates (or the amount) that were received.',
         });
       }
     }
@@ -389,49 +386,77 @@ export const stcClaimSchema = z
 export type StcClaimInput = z.input<typeof stcClaimSchema>;
 export type StcClaimValues = z.output<typeof stcClaimSchema>;
 
+// ── STC settings (Admin only) ─────────────────────────────────────────────
+
+/** The business-wide STC rates and charges (Settings → STC settings). */
+export const stcSettingsSchema = z.object({
+  customerRateAud: moneyField('the customer rate'),
+  internalRateAud: moneyField('the internal rate'),
+  adminChargesAud: moneyField('the admin charges'),
+});
+
+export type StcSettingsInput = z.input<typeof stcSettingsSchema>;
+export type StcSettingsValues = z.output<typeof stcSettingsSchema>;
+export type StcRates = StcSettingsValues;
+
+export const NO_STC_RATES: StcRates = {
+  customerRateAud: null,
+  internalRateAud: null,
+  adminChargesAud: null,
+};
+
+/** rate × count in exact cents, or null when either is missing. */
+function timesRate(rate: string | null, count: number | null): string | null {
+  return rate !== null && count !== null
+    ? ((Math.round(Number(rate) * 100) * count) / 100).toFixed(2)
+    : null;
+}
+
 /**
- * STC money worked out on the server (§1.4): what has been received (amounts with a received
- * date), what is still to come, the net after admin charges, and the customer/internal values
- * (rate × certificates). Exact cents; null when there's nothing to add up.
+ * STC money worked out on the server (§1.4). Each kind's amount is its certificates × the
+ * internal rate from STC settings (the typed amount when there is no count or no rate).
+ * Received = amounts with a received date; still to come = the rest; net = received less the
+ * admin charges; customer/internal value = all certificates × that rate. Exact cents; null when
+ * there's nothing to add up.
  */
-export function stcTotals(stc: {
-  solarStcs: number | null;
-  solarStcsAmountAud: string | null;
-  solarStcsReceivedDate: string | null;
-  batteryStcs: number | null;
-  batteryStcsAmountAud: string | null;
-  batteryStcsReceivedDate: string | null;
-  adminChargesAud: string | null;
-  customerStcRateAud: string | null;
-  internalStcRateAud: string | null;
-}) {
+export function stcTotals(
+  stc: {
+    solarStcs: number | null;
+    solarStcsAmountAud: string | null;
+    solarStcsReceivedDate: string | null;
+    batteryStcs: number | null;
+    batteryStcsAmountAud: string | null;
+    batteryStcsReceivedDate: string | null;
+  },
+  rates: StcRates,
+) {
   const certificates =
     stc.solarStcs === null && stc.batteryStcs === null
       ? null
       : (stc.solarStcs ?? 0) + (stc.batteryStcs ?? 0);
+  const solarAud = timesRate(rates.internalRateAud, stc.solarStcs) ?? stc.solarStcsAmountAud;
+  const batteryAud = timesRate(rates.internalRateAud, stc.batteryStcs) ?? stc.batteryStcsAmountAud;
   const received = [
-    stc.solarStcsReceivedDate ? stc.solarStcsAmountAud : null,
-    stc.batteryStcsReceivedDate ? stc.batteryStcsAmountAud : null,
+    stc.solarStcsReceivedDate ? solarAud : null,
+    stc.batteryStcsReceivedDate ? batteryAud : null,
   ];
-  const anyAmount = stc.solarStcsAmountAud !== null || stc.batteryStcsAmountAud !== null;
+  const anyAmount = solarAud !== null || batteryAud !== null;
   const totalReceivedAud = anyAmount ? amountAddsUp(received) : null;
   const outstanding = [
-    stc.solarStcsReceivedDate ? null : stc.solarStcsAmountAud,
-    stc.batteryStcsReceivedDate ? null : stc.batteryStcsAmountAud,
+    stc.solarStcsReceivedDate ? null : solarAud,
+    stc.batteryStcsReceivedDate ? null : batteryAud,
   ];
-  const value = (rate: string | null) =>
-    rate !== null && certificates !== null
-      ? ((Math.round(Number(rate) * 100) * certificates) / 100).toFixed(2)
-      : null;
   return {
     totalStcs: certificates,
+    solarAud,
+    batteryAud,
     totalReceivedAud,
     outstandingAud: anyAmount ? amountAddsUp(outstanding) : null,
     netReceivedAud:
-      totalReceivedAud !== null && stc.adminChargesAud !== null
-        ? amountAddsUp([totalReceivedAud, `-${stc.adminChargesAud}`])
+      totalReceivedAud !== null && rates.adminChargesAud !== null
+        ? amountAddsUp([totalReceivedAud, `-${rates.adminChargesAud}`])
         : totalReceivedAud,
-    customerValueAud: value(stc.customerStcRateAud),
-    internalValueAud: value(stc.internalStcRateAud),
+    customerValueAud: timesRate(rates.customerRateAud, certificates),
+    internalValueAud: timesRate(rates.internalRateAud, certificates),
   };
 }

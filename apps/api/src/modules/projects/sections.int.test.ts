@@ -478,6 +478,7 @@ describe('project workspace sections (Step 2.7)', () => {
 
   it('STC claim: totals are worked out on the server', async () => {
     const api = as();
+    await api.admin.stcSettings.save({ customerRateAud: '38', adminChargesAud: '50' });
     await api.projects.updateStcClaim({
       id: projectId,
       values: {
@@ -490,13 +491,13 @@ describe('project workspace sections (Step 2.7)', () => {
         solarStcsReceivedDate: '2026-10-30',
         batteryStcs: 50,
         batteryStcsAmountAud: '1900',
-        adminChargesAud: '50',
-        customerStcRateAud: '38',
       },
     });
     const project = await api.projects.get({ id: projectId });
     expect(project.stc?.totals).toEqual({
       totalStcs: 130,
+      solarAud: '3040.00',
+      batteryAud: '1900.00',
       totalReceivedAud: '3040.00',
       outstandingAud: '1900.00',
       netReceivedAud: '2990.00',
@@ -510,6 +511,68 @@ describe('project workspace sections (Step 2.7)', () => {
         values: { batteryStcsReceivedDate: '2026-10-30' },
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('STC settings: global, Admin only; amounts and the dashboard use the internal rate', async () => {
+    const admin = as();
+    const manager = createCaller(
+      fakeContext(
+        {
+          status: 'authenticated',
+          user: fakeUser({
+            id: micky,
+            role: { key: 'manager', name: 'Manager' },
+            permissions: allPermissions(),
+          }),
+          firebaseUid: 'uid',
+        },
+        { db },
+      ),
+    );
+    await expect(manager.admin.stcSettings.get()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(manager.admin.stcSettings.save({ internalRateAud: '1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+
+    await admin.admin.stcSettings.save({
+      customerRateAud: '40',
+      internalRateAud: '37.50',
+      adminChargesAud: '20',
+    });
+    expect(await admin.admin.stcSettings.get()).toMatchObject({
+      customerRateAud: '40.00',
+      internalRateAud: '37.50',
+      adminChargesAud: '20.00',
+    });
+    await admin.projects.updateStcClaim({
+      id: projectId,
+      values: {
+        solarStcs: 80,
+        solarStcsAmountAud: '1',
+        solarStcsReceivedDate: '2026-10-30',
+        batteryStcs: 20,
+      },
+    });
+    expect((await admin.projects.get({ id: projectId })).stc?.totals).toMatchObject({
+      solarAud: '3000.00',
+      batteryAud: '750.00',
+      totalReceivedAud: '3000.00',
+      outstandingAud: '750.00',
+      netReceivedAud: '2980.00',
+      internalValueAud: '3750.00',
+      customerValueAud: '4000.00',
+    });
+    // Other roles see the totals, never the rates or the customer value.
+    const seen = (await manager.projects.get({ id: projectId })).stc;
+    expect(seen?.totals.customerValueAud).toBeNull();
+    expect(JSON.stringify(seen)).not.toMatch(/customerStcRate|internalStcRate|37\.5/);
+
+    const dashboard = await admin.dashboard.overview({ period: '7d' });
+    expect(dashboard.projects?.stc).toMatchObject({
+      receivedAud: '3000.00',
+      outstandingAud: '750.00',
+      certificates: 100,
+    });
   });
 
   it('needs projects:edit to change a section', async () => {

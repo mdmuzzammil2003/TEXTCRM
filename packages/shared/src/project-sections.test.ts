@@ -46,14 +46,14 @@ describe('stcTotals', () => {
     batteryStcs: null,
     batteryStcsAmountAud: null,
     batteryStcsReceivedDate: null,
-    adminChargesAud: null,
-    customerStcRateAud: null,
-    internalStcRateAud: null,
   };
+  const noRates = { customerRateAud: null, internalRateAud: null, adminChargesAud: null };
 
   it('is all null when nothing is entered', () => {
-    expect(stcTotals(empty)).toEqual({
+    expect(stcTotals(empty, noRates)).toEqual({
       totalStcs: null,
+      solarAud: null,
+      batteryAud: null,
       totalReceivedAud: null,
       outstandingAud: null,
       netReceivedAud: null,
@@ -62,25 +62,49 @@ describe('stcTotals', () => {
     });
   });
 
-  it('counts only amounts with a received date, in exact cents', () => {
+  it('uses typed amounts when no internal rate is set; counts only received ones', () => {
     expect(
-      stcTotals({
-        ...empty,
-        solarStcs: 81,
-        solarStcsAmountAud: '3077.19',
-        solarStcsReceivedDate: '2026-10-30',
-        batteryStcs: 33,
-        batteryStcsAmountAud: '1254.01',
-        batteryStcsReceivedDate: '2026-10-31',
-        adminChargesAud: '0.10',
-        internalStcRateAud: '37.10',
-      }),
+      stcTotals(
+        {
+          ...empty,
+          solarStcs: 81,
+          solarStcsAmountAud: '3077.19',
+          solarStcsReceivedDate: '2026-10-30',
+          batteryStcs: 33,
+          batteryStcsAmountAud: '1254.01',
+        },
+        { ...noRates, adminChargesAud: '0.10' },
+      ),
+    ).toMatchObject({
+      totalStcs: 114,
+      totalReceivedAud: '3077.19',
+      outstandingAud: '1254.01',
+      netReceivedAud: '3077.09',
+      internalValueAud: null,
+    });
+  });
+
+  it('works the amounts out from the internal rate in settings, in exact cents', () => {
+    expect(
+      stcTotals(
+        {
+          ...empty,
+          solarStcs: 81,
+          solarStcsAmountAud: '1.00',
+          solarStcsReceivedDate: '2026-10-30',
+          batteryStcs: 33,
+          batteryStcsReceivedDate: '2026-10-31',
+        },
+        { customerRateAud: '38.00', internalRateAud: '37.10', adminChargesAud: '0.10' },
+      ),
     ).toEqual({
       totalStcs: 114,
-      totalReceivedAud: '4331.20',
+      solarAud: '3005.10',
+      batteryAud: '1224.30',
+      totalReceivedAud: '4229.40',
       outstandingAud: '0.00',
-      netReceivedAud: '4331.10',
-      customerValueAud: null,
+      netReceivedAud: '4229.30',
+      customerValueAud: '4332.00',
       internalValueAud: '4229.40',
     });
   });

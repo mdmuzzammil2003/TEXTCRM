@@ -646,7 +646,12 @@ const STC_FIELDS: FieldSpec<StcClaimInput>[] = [
   { name: 'submittedDate', label: 'Submitted', kind: 'date' },
   { heading: 'Solar STCs' },
   { name: 'solarStcs', label: 'Certificates', kind: 'count' },
-  { name: 'solarStcsAmountAud', label: 'Amount', kind: 'money' },
+  {
+    name: 'solarStcsAmountAud',
+    label: 'Amount',
+    kind: 'money',
+    hint: 'Only used when there is no count or no internal rate set',
+  },
   {
     name: 'solarStcsReceivedDate',
     label: 'Received on',
@@ -657,15 +662,6 @@ const STC_FIELDS: FieldSpec<StcClaimInput>[] = [
   { name: 'batteryStcs', label: 'Certificates', kind: 'count' },
   { name: 'batteryStcsAmountAud', label: 'Amount', kind: 'money' },
   { name: 'batteryStcsReceivedDate', label: 'Received on', kind: 'date' },
-  { heading: 'Rates & charges' },
-  { name: 'customerStcRateAud', label: 'Customer rate per STC', kind: 'money' },
-  { name: 'internalStcRateAud', label: 'Internal rate per STC', kind: 'money' },
-  {
-    name: 'adminChargesAud',
-    label: 'Admin charges',
-    kind: 'money',
-    hint: 'Taken off the total received',
-  },
 ];
 
 const stcLine = (count: number | null, amount: string | null, received: string | null) =>
@@ -685,7 +681,7 @@ export function StcClaimCard({ project, editable }: CardProps) {
       title="STC claim"
       badge={<StatusBadge status={stc?.status} />}
       editable={editable}
-      description="Totals are worked out from the amounts that have a received date."
+      description="Amounts are the certificates × the internal rate in STC settings. Totals count the ones with a received date."
       form={(close) => (
         <SectionForm<StcClaimInput, StcClaimValues>
           resolver={zodResolver(stcClaimSchema)}
@@ -700,9 +696,6 @@ export function StcClaimCard({ project, editable }: CardProps) {
             batteryStcs: stc?.batteryStcs ?? '',
             batteryStcsAmountAud: stc?.batteryStcsAmountAud ?? '',
             batteryStcsReceivedDate: stc?.batteryStcsReceivedDate ?? '',
-            adminChargesAud: stc?.adminChargesAud ?? '',
-            customerStcRateAud: stc?.customerStcRateAud ?? '',
-            internalStcRateAud: stc?.internalStcRateAud ?? '',
           }}
           fields={STC_FIELDS}
           submit={(values) => update.mutateAsync({ id: project.id, values })}
@@ -718,15 +711,11 @@ export function StcClaimCard({ project, editable }: CardProps) {
             { label: 'Submitted', value: day(stc.submittedDate) },
             {
               label: 'Solar',
-              value: stcLine(stc.solarStcs, stc.solarStcsAmountAud, stc.solarStcsReceivedDate),
+              value: stcLine(stc.solarStcs, totals.solarAud, stc.solarStcsReceivedDate),
             },
             {
               label: 'Battery',
-              value: stcLine(
-                stc.batteryStcs,
-                stc.batteryStcsAmountAud,
-                stc.batteryStcsReceivedDate,
-              ),
+              value: stcLine(stc.batteryStcs, totals.batteryAud, stc.batteryStcsReceivedDate),
             },
             {
               label: 'Total received',

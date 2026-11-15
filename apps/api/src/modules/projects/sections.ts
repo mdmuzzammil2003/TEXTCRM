@@ -14,8 +14,10 @@ import {
   installerInvoiceSchema,
   isOnFinance,
   stcClaimSchema,
+  NO_STC_RATES,
   stcTotals,
   warehouseSchema,
+  type StcRates,
 } from '@mms/shared';
 import type { Db, Tx } from '../../db/client.ts';
 import {
@@ -28,6 +30,7 @@ import {
   projects,
   projectStcClaims,
   projectWarehouse,
+  stcSettings,
   users,
 } from '../../db/schema/index.ts';
 import { permissionProcedure } from '../../trpc/trpc.ts';
@@ -375,14 +378,29 @@ export const sectionProcedures = {
     ),
 };
 
-/** Every post-sale section of one project, with the values worked out on the server. */
-export async function loadSections(db: Db, project: Project) {
+/** The business-wide STC rates and charges (Settings → STC settings). */
+export async function loadStcRates(db: Db | Tx): Promise<StcRates> {
+  const [row] = await db.select().from(stcSettings);
+  return row
+    ? {
+        customerRateAud: row.customerRateAud,
+        internalRateAud: row.internalRateAud,
+        adminChargesAud: row.adminChargesAud,
+      }
+    : NO_STC_RATES;
+}
+
+/**
+ * Every post-sale section of one project, with the values worked out on the server. The STC
+ * rates are never sent; only an Admin gets the customer value worked out from them.
+ */
+export async function loadSections(db: Db, project: Project, viewer: { isAdmin: boolean }) {
   const verifiedBy = db
     .select({ name: users.name })
     .from(users)
     .innerJoin(projectEbVerification, eq(projectEbVerification.verifiedByUserId, users.id))
     .where(eq(projectEbVerification.projectId, project.id));
-  const [[eb], [verifier], [grid], [finance], [warehouse], [installation], [stc]] =
+  const [[eb], [verifier], [grid], [finance], [warehouse], [installation], [stc], rates] =
     await Promise.all([
       db
         .select()
@@ -406,6 +424,7 @@ export async function loadSections(db: Db, project: Project) {
         .leftJoin(users, eq(users.id, projectInstallation.bookedByUserId))
         .where(eq(projectInstallation.projectId, project.id)),
       db.select().from(projectStcClaims).where(eq(projectStcClaims.projectId, project.id)),
+      loadStcRates(db),
     ]);
 
   const checks = ebCheckResults(eb ?? {}, project.phase);
@@ -431,12 +450,31 @@ export async function loadSections(db: Db, project: Project) {
           completedMonth: completedMonth(installation.row.completedDate),
         }
       : null,
-    stc: stc
-      ? {
-          ...sectionValues(stc),
-          bridgeselectSyncedAt: stc.bridgeselectSyncedAt?.toISOString() ?? null,
-          totals: stcTotals(stc),
-        }
-      : null,
+    stc: stc ? stcSection(stc, rates, viewer.isAdmin) : null,
   };
+}
+
+/** The STC claim as the page shows it: the old per-project rates left out (now in settings). */
+function stcSection(stc: typeof projectStcClaims.$inferSelect, rates: StcRates, isAdmin: boolean) {
+  const values = withoutOldRates(sectionValues(stc));
+  const totals = stcTotals(stc, rates);
+  return {
+    ...values,
+    bridgeselectSyncedAt: stc.bridgeselectSyncedAt?.toISOString() ?? null,
+    /** The admin charges taken off (the amount, not the rate). */
+    adminChargesAud: rates.adminChargesAud,
+    totals: { ...totals, customerValueAud: isAdmin ? totals.customerValueAud : null },
+  };
+}
+
+type OldRateKeys = 'adminChargesAud' | 'customerStcRateAud' | 'internalStcRateAud';
+
+/** The STC row without the per-project rates it used to hold (kept in the table, never sent). */
+function withoutOldRates<T extends Record<OldRateKeys, unknown>>(row: T): Omit<T, OldRateKeys> {
+  const copy: Partial<T> = { ...row };
+  delete copy.adminChargesAud;
+  delete copy.customerStcRateAud;
+  delete copy.internalStcRateAud;
+  // The three keys were just removed, which is exactly what Omit describes.
+  return copy as Omit<T, OldRateKeys>;
 }

@@ -36,6 +36,7 @@ import { RolesPage } from '../pages/settings/admin/RolesPage.tsx';
 import { OptionListsPage } from '../pages/settings/admin/OptionListsPage.tsx';
 import { HardwarePage } from '../pages/settings/admin/HardwarePage.tsx';
 import { CompanyPage } from '../pages/settings/admin/CompanyPage.tsx';
+import { StcSettingsPage } from '../pages/settings/admin/StcSettingsPage.tsx';
 import { IntegrationsPage } from '../pages/settings/integrations/IntegrationsPage.tsx';
 import { EmailSignaturePage } from '../pages/settings/signature/EmailSignaturePage.tsx';
 import { JobsPage } from '../pages/settings/JobsPage.tsx';
@@ -320,6 +321,13 @@ const companySettingsRoute = createRoute({
   ),
 });
 
+// Admin only (the page says so to anyone else; the API refuses them too).
+const stcSettingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/stc',
+  component: StcSettingsPage,
+});
+
 // Everyone may open it: Gmail is each person's own; the organisation cards need integrations.
 const integrationsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -362,6 +370,7 @@ export const routeTree = rootRoute.addChildren([
     optionListsSettingsRoute,
     hardwareSettingsRoute,
     companySettingsRoute,
+    stcSettingsRoute,
     integrationsRoute,
     emailSignatureRoute,
   ]),

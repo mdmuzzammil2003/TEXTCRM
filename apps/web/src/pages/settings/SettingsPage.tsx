@@ -8,6 +8,7 @@ import {
   Signature,
   ListChecks,
   PlugZap,
+  Receipt,
   RefreshCw,
   ShieldCheck,
   Upload,
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { PageHeader } from '../../components/PageHeader.tsx';
-import { useCan } from '../../lib/hooks.ts';
+import { useCan, useIsAdmin } from '../../lib/hooks.ts';
 import { Card, EmptyState } from '../../ui/index.ts';
 
 type Section = {
@@ -25,6 +26,7 @@ type Section = {
     | '/settings/option-lists'
     | '/settings/hardware'
     | '/settings/company'
+    | '/settings/stc'
     | '/settings/imports'
     | '/settings/sheet-sync'
     | '/settings/jobs'
@@ -39,6 +41,7 @@ type Section = {
 /** Settings home: one card per area the role can open. */
 export function SettingsPage() {
   const can = useCan();
+  const isAdmin = useIsAdmin();
   const canWrite = (feature: 'leads' | 'contacts' | 'hardware') =>
     can(feature, 'create') && can(feature, 'edit');
   const groups: { title: string; sections: Section[] }[] = [
@@ -82,6 +85,13 @@ export function SettingsPage() {
           description: 'Legal name, ABN, licences and contact details.',
           icon: <Building2 />,
           visible: can('users', 'view'),
+        },
+        {
+          to: '/settings/stc',
+          title: 'STC settings',
+          description: 'Customer and internal rate per STC, and admin charges. Admin only.',
+          icon: <Receipt />,
+          visible: isAdmin,
         },
         {
           to: '/settings/option-lists',

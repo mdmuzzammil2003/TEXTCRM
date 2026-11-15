@@ -233,6 +233,7 @@ export const projectStcClaims = pgTable('project_stc_claims', {
   batteryStcs: integer(),
   batteryStcsAmountAud: money(),
   batteryStcsReceivedDate: day(),
+  /** No longer used: rates and charges are global (stc_settings). Old values are kept. */
   adminChargesAud: money(),
   customerStcRateAud: money(),
   internalStcRateAud: money(),

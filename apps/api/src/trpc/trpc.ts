@@ -48,6 +48,14 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   throw new TRPCError({ code: 'UNAUTHORIZED', message });
 });
 
+/** Requires the Admin role itself (for settings no other role may see, whatever its matrix). */
+export const adminOnlyProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role.key !== 'admin') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Only Admin can open this.' });
+  }
+  return next();
+});
+
 /** Requires the user's role to grant `action` on `feature` (§1.2 permission matrix). */
 export function permissionProcedure(feature: Feature, action: PermissionAction) {
   return protectedProcedure.use(({ ctx, next }) => {

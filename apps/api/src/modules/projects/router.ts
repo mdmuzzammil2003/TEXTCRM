@@ -337,7 +337,7 @@ export const projectsRouter = router({
           .orderBy(asc(projectSystemInverters.position), asc(projectSystemInverters.createdAt)),
         ctx.db.select().from(projectPricing).where(eq(projectPricing.projectId, project.id)),
         entityHistory(ctx.db, 'project', project.id),
-        loadSections(ctx.db, project),
+        loadSections(ctx.db, project, { isAdmin: ctx.user.role.key === 'admin' }),
       ]);
       // The history of the lead it was converted from, for roles that may see leads.
       const leadHistory =

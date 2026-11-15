@@ -13,6 +13,7 @@ import {
   optionProtection,
   permissionMatrixSchema,
   roleInputSchema,
+  stcSettingsSchema,
   updateUserSchema,
   type HardwareCatalogKind,
   type PermissionMatrix,
@@ -28,9 +29,15 @@ import {
   options,
   rolePermissions,
   roles,
+  stcSettings,
   users,
 } from '../../db/schema/index.ts';
-import { permissionProcedure, protectedProcedure, router } from '../../trpc/trpc.ts';
+import {
+  adminOnlyProcedure,
+  permissionProcedure,
+  protectedProcedure,
+  router,
+} from '../../trpc/trpc.ts';
 import { diff, recordAudit, type Actor } from '../audit.ts';
 import { containsPattern } from '../search.ts';
 import { reassignOpenLeads, reassignPreview, reassignTarget } from './reassign.ts';
@@ -805,7 +812,43 @@ const companyRouter = router({
     ),
 });
 
+/** Settings → STC settings: the business-wide STC rates and charges. Admin only. */
+const stcSettingsRouter = router({
+  get: adminOnlyProcedure.query(async ({ ctx }) => {
+    const [row] = await ctx.db.select().from(stcSettings);
+    return {
+      customerRateAud: row?.customerRateAud ?? null,
+      internalRateAud: row?.internalRateAud ?? null,
+      adminChargesAud: row?.adminChargesAud ?? null,
+      updatedAt: row?.updatedAt.toISOString() ?? null,
+    };
+  }),
+
+  save: adminOnlyProcedure.input(stcSettingsSchema).mutation(({ ctx, input }) =>
+    ctx.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(stcSettings);
+      const changes = diff(existing ?? {}, input);
+      if (!changes) return { saved: false };
+      await tx
+        .insert(stcSettings)
+        .values({ id: true, ...input, updatedByUserId: ctx.user.id })
+        .onConflictDoUpdate({
+          target: stcSettings.id,
+          set: { ...input, updatedByUserId: ctx.user.id },
+        });
+      await recordAudit(tx, actorOf(ctx), {
+        action: 'update',
+        entityType: 'stc_settings',
+        entityId: 'stc',
+        ...changes,
+      });
+      return { saved: true };
+    }),
+  ),
+});
+
 export const adminRouter = router({
+  stcSettings: stcSettingsRouter,
   users: usersRouter,
   roles: rolesRouter,
   optionLists: optionListsAdminRouter,

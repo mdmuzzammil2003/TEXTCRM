@@ -176,6 +176,13 @@
       "when": 1794771477951,
       "tag": "0024_closed_projects_admin_only",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794772015081,
+      "tag": "0025_stc_settings",
+      "breakpoints": true
     }
   ]
 }

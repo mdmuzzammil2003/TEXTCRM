@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, pgTable, text, uuid } from 'drizzle-orm/pg-core';
-import { timestamps } from './_columns.ts';
+import { money, timestamps } from './_columns.ts';
 import { users } from './users.ts';
 
 /**
@@ -29,4 +29,25 @@ export const companyProfile = pgTable(
     ...timestamps,
   },
   (t) => [check('company_profile_single_row', sql`${t.id}`)],
+);
+
+/**
+ * STC rates and charges, set once for the whole business by an Admin (Settings → STC settings)
+ * and used for every project's STC totals and the dashboard. Only Admins can read them.
+ * `id` is always true, so a second row can't exist.
+ */
+export const stcSettings = pgTable(
+  'stc_settings',
+  {
+    id: boolean().primaryKey().default(true),
+    /** What the customer is credited per STC. */
+    customerRateAud: money(),
+    /** What the business receives per STC: STC amounts and totals are worked out with it. */
+    internalRateAud: money(),
+    /** Taken off each job's STC money received. */
+    adminChargesAud: money(),
+    updatedByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [check('stc_settings_single_row', sql`${t.id}`)],
 );

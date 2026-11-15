@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { businessToday, emptyPermissionMatrix, type PermissionMatrix } from '@mms/shared';
 import {
@@ -10,6 +11,7 @@ import {
   projectStcClaims,
   tickets,
 } from '../../db/schema/index.ts';
+import type { Tx } from '../../db/client.ts';
 import { insertFakeLeads } from '../../db/fake-leads.ts';
 import { loadLegacySeedInput, seed } from '../../db/seed.ts';
 import { createTestDb, truncateAll } from '../../test/db.ts';
@@ -111,28 +113,35 @@ describe('dashboard (Step 2.9)', () => {
       ])
       .returning({ id: projects.id });
     const [p1, p2, p3, p4] = rows.map((row) => row.id);
-    await db.insert(projectPricing).values([
-      { projectId: p1 ?? '', sellingPriceAud: '10000.00', contractValueAud: '12000.00' },
-      { projectId: p2 ?? '', sellingPriceAud: '8000.00' },
-      { projectId: p3 ?? '', sellingPriceAud: '5000.50' },
-      { projectId: p4 ?? '', sellingPriceAud: '99999.00' },
-    ]);
-    await db.insert(projectInstallation).values([
-      { projectId: p1 ?? '', bookingDate: businessToday() }, // scheduled this month
-      { projectId: p3 ?? '', bookingDate: monthStart(0), completedDate: monthStart(0) },
-    ]);
-    await db.insert(projectStcClaims).values([
-      {
-        projectId: p3 ?? '',
-        solarStcs: 45,
-        solarStcsAmountAud: '1822.50',
-        solarStcsReceivedDate: monthStart(0),
-        batteryStcs: 10,
-        batteryStcsAmountAud: '400.00',
-      },
-      { projectId: p1 ?? '', solarStcs: 20, solarStcsAmountAud: '800.00' },
-      { projectId: p4 ?? '', solarStcs: 99, solarStcsAmountAud: '9999.00' },
-    ]);
+    // Sections of a Lost job are Admin-only in the database: the fixtures write as an Admin.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('mms.admin', 'on', true)`);
+      await fixtures(tx);
+    });
+    async function fixtures(db: Tx) {
+      await db.insert(projectPricing).values([
+        { projectId: p1 ?? '', sellingPriceAud: '10000.00', contractValueAud: '12000.00' },
+        { projectId: p2 ?? '', sellingPriceAud: '8000.00' },
+        { projectId: p3 ?? '', sellingPriceAud: '5000.50' },
+        { projectId: p4 ?? '', sellingPriceAud: '99999.00' },
+      ]);
+      await db.insert(projectInstallation).values([
+        { projectId: p1 ?? '', bookingDate: businessToday() }, // scheduled this month
+        { projectId: p3 ?? '', bookingDate: monthStart(0), completedDate: monthStart(0) },
+      ]);
+      await db.insert(projectStcClaims).values([
+        {
+          projectId: p3 ?? '',
+          solarStcs: 45,
+          solarStcsAmountAud: '1822.50',
+          solarStcsReceivedDate: monthStart(0),
+          batteryStcs: 10,
+          batteryStcsAmountAud: '400.00',
+        },
+        { projectId: p1 ?? '', solarStcs: 20, solarStcsAmountAud: '800.00' },
+        { projectId: p4 ?? '', solarStcs: 99, solarStcsAmountAud: '9999.00' },
+      ]);
+    }
 
     const ticket = (n: number, overrides: Partial<typeof tickets.$inferInsert>) => ({
       ticketNumber: `TKT-TEST-${String(n)}`,

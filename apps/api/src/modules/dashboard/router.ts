@@ -20,6 +20,7 @@ import {
   users,
 } from '../../db/schema/index.ts';
 import { protectedProcedure, router } from '../../trpc/trpc.ts';
+import { loadStcRates } from '../projects/sections.ts';
 
 // The dashboard (Step 2.9): server-side aggregates only — every number is one GROUP BY or
 // COUNT over indexed columns, never rows shipped to the browser. Each section is returned
@@ -147,14 +148,19 @@ async function projectSection(db: Db, today: string) {
     left join project_pricing pp on pp.project_id = p.id
     group by m.month
     order by m.month`);
-  // STC money across live jobs (same rules as the project's STC card: an amount with a
-  // received date has been received; one without is still to come).
+  // STC money across live jobs, by the same rules as the project's STC card: each kind is its
+  // certificates × the internal rate from STC settings (the typed amount when there is no count
+  // or no rate); an amount with a received date has been received, one without is to come.
+  const { internalRateAud } = await loadStcRates(db);
+  const rate = sql`${internalRateAud}::numeric`;
+  const solar = sql`coalesce(${projectStcClaims.solarStcs} * ${rate}, ${projectStcClaims.solarStcsAmountAud})`;
+  const battery = sql`coalesce(${projectStcClaims.batteryStcs} * ${rate}, ${projectStcClaims.batteryStcsAmountAud})`;
   const [stc] = await db
     .select({
-      received: sql<string>`coalesce(sum(case when ${projectStcClaims.solarStcsReceivedDate} is not null then ${projectStcClaims.solarStcsAmountAud} else 0 end) + sum(case when ${projectStcClaims.batteryStcsReceivedDate} is not null then ${projectStcClaims.batteryStcsAmountAud} else 0 end), 0)::numeric(14,2)::text`,
-      outstanding: sql<string>`coalesce(sum(case when ${projectStcClaims.solarStcsReceivedDate} is null then coalesce(${projectStcClaims.solarStcsAmountAud}, 0) else 0 end) + sum(case when ${projectStcClaims.batteryStcsReceivedDate} is null then coalesce(${projectStcClaims.batteryStcsAmountAud}, 0) else 0 end), 0)::numeric(14,2)::text`,
+      received: sql<string>`coalesce(sum(case when ${projectStcClaims.solarStcsReceivedDate} is not null then coalesce(${solar}, 0) else 0 end) + sum(case when ${projectStcClaims.batteryStcsReceivedDate} is not null then coalesce(${battery}, 0) else 0 end), 0)::numeric(14,2)::text`,
+      outstanding: sql<string>`coalesce(sum(case when ${projectStcClaims.solarStcsReceivedDate} is null then coalesce(${solar}, 0) else 0 end) + sum(case when ${projectStcClaims.batteryStcsReceivedDate} is null then coalesce(${battery}, 0) else 0 end), 0)::numeric(14,2)::text`,
       certificates: sql<number>`coalesce(sum(coalesce(${projectStcClaims.solarStcs}, 0) + coalesce(${projectStcClaims.batteryStcs}, 0)), 0)::int`,
-      jobs: sql<number>`count(*) filter (where ${projectStcClaims.solarStcsAmountAud} is not null or ${projectStcClaims.batteryStcsAmountAud} is not null)::int`,
+      jobs: sql<number>`count(*) filter (where ${solar} is not null or ${battery} is not null)::int`,
     })
     .from(projectStcClaims)
     .innerJoin(projects, eq(projects.id, projectStcClaims.projectId))
