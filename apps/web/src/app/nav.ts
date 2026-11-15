@@ -30,9 +30,9 @@ export const SETTINGS_FEATURES: readonly Feature[] = [
 
 export const MAIN_NAV: readonly NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, features: ['dashboard'] },
-  { to: '/leads', label: 'Leads', icon: Zap, features: ['leads'] },
   { to: '/contacts', label: 'Contacts', icon: UserRound, features: ['contacts'] },
   { to: '/companies', label: 'Companies', icon: Building2, features: ['companies'] },
+  { to: '/leads', label: 'Leads', icon: Zap, features: ['leads'] },
   { to: '/projects', label: 'Projects', icon: FolderKanban, features: ['projects'] },
   { to: '/tickets', label: 'Tickets', icon: LifeBuoy, features: ['tickets'] },
 ];
