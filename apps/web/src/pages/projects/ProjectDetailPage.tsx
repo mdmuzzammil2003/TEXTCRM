@@ -23,7 +23,7 @@ import { LeadIdLink } from '../../components/LeadIdLink.tsx';
 import { LEAD_FIELD_LABELS } from '../leads/lead-labels.ts';
 import { errorMessage } from '../../lib/errors.ts';
 import { fullName } from '../../lib/format.ts';
-import { useCan, useUsers } from '../../lib/hooks.ts';
+import { useCan, useIsAdmin, useUsers } from '../../lib/hooks.ts';
 import { trpcErrorCode, useTRPC, type RouterOutputs } from '../../lib/trpc.ts';
 import {
   Alert,
@@ -193,8 +193,11 @@ function ProjectView({ project }: { project: Project }) {
   const setStage = useMutation(trpc.projects.setStage.mutationOptions());
   const setStatus = useMutation(trpc.projects.setStatus.mutationOptions());
   const assign = useMutation(trpc.projects.assignSales.mutationOptions());
-  const editable = can('projects', 'edit');
+  const isAdmin = useIsAdmin();
   const closed = project.status === 'Closed' || project.status === 'Lost';
+  // A Closed or Lost job is finished: only an Admin can change it.
+  const lockedForRole = closed && !isAdmin;
+  const editable = can('projects', 'edit') && !lockedForRole;
   const step = stageNumber(project.stage);
 
   const run = (action: Promise<unknown>, success: string) =>
@@ -279,6 +282,7 @@ function ProjectView({ project }: { project: Project }) {
           </div>
         </div>
 
+        {lockedForRole && <Alert tone="info">Only Admin can edit closed or lost projects.</Alert>}
         <Card>
           <CardContent className="grid gap-4 md:grid-cols-[2fr_1fr_1fr]">
             <div className="flex flex-col gap-2">

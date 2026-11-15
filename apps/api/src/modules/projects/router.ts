@@ -49,12 +49,12 @@ import {
 } from '../../db/schema/index.ts';
 import { permissionProcedure, protectedProcedure, router } from '../../trpc/trpc.ts';
 import { logSystemActivity } from '../activities/service.ts';
-import { diff, entityHistory, recordAudit, type Actor } from '../audit.ts';
+import { diff, entityHistory, recordAudit } from '../audit.ts';
 import { checkInverterLines, withInverterLabels } from '../hardware/inverter-lines.ts';
 import { assertHardware, hardwareOption } from '../hardware/router.ts';
 import { assertOption } from '../options.ts';
 import { containsPattern, phoneContains } from '../search.ts';
-import { actorOf, editableProject, notFound, projectRef } from './common.ts';
+import { actorOf, editableProject, notFound, projectRef, type Ctx } from './common.ts';
 import { convertLead, previewConversion } from './conversion.ts';
 import { loadSections, sectionProcedures } from './sections.ts';
 
@@ -198,11 +198,11 @@ function stageAndStatus(
 
 async function changeStageOrStatus(
   tx: Tx,
-  ctx: { user: { id: string }; meta: Actor['meta'] },
+  ctx: Ctx,
   id: string,
   patch: { stage?: string; status?: string },
 ) {
-  const existing = await editableProject(tx, id);
+  const existing = await editableProject(tx, id, ctx.user);
   if (patch.stage !== undefined) await assertOption(tx, 'projectStages', patch.stage, 'stage');
   if (patch.status !== undefined) {
     await assertOption(tx, 'projectStatuses', patch.status, 'status');
@@ -413,7 +413,7 @@ export const projectsRouter = router({
     .input(z.object({ id: z.uuid(), salesUserId: z.uuid().nullable() }))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        const existing = await editableProject(tx, input.id);
+        const existing = await editableProject(tx, input.id, ctx.user);
         if (existing.salesUserId === input.salesUserId) return { id: input.id };
         let name: string | null = null;
         if (input.salesUserId) {
@@ -454,7 +454,7 @@ export const projectsRouter = router({
     .input(z.object({ id: z.uuid(), values: projectSiteSchema }))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        const existing = await editableProject(tx, input.id);
+        const existing = await editableProject(tx, input.id, ctx.user);
         const values = input.values;
         await assertOption(tx, 'houseStoreys', values.houseStorey, 'storey', existing.houseStorey);
         await assertOption(tx, 'roofTypes', values.roofType, 'roof type', existing.roofType);
@@ -484,7 +484,7 @@ export const projectsRouter = router({
     .input(z.object({ id: z.uuid(), values: projectSystemSchema }))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectSystemDesign)
@@ -558,7 +558,7 @@ export const projectsRouter = router({
     .input(z.object({ id: z.uuid(), values: projectPricingSchema }))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectPricing)

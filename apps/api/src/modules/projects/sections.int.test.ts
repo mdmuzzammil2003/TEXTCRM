@@ -377,12 +377,16 @@ describe('project workspace sections (Step 2.7)', () => {
     await api.projects.updateInstallation({ id: projectId, values: { status: 'Cancelled' } });
     expect(await status()).toEqual({ project: 'Lost', installation: 'Cancelled' });
 
-    // Straight in the database, without the API.
+    // Straight in the database, without the API (reopened first: a Lost job is Admin-only).
+    await api.projects.setStatus({ id: projectId, status: 'Active' });
     await db.execute(
       sql`update project_installation set status = 'Closed' where project_id = ${projectId}`,
     );
     expect(await status()).toEqual({ project: 'Closed', installation: 'Closed' });
-    await db.execute(sql`update projects set status = 'Completed' where id = ${projectId}`);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('mms.admin', 'on', true)`);
+      await tx.execute(sql`update projects set status = 'Completed' where id = ${projectId}`);
+    });
     expect(await status()).toEqual({
       project: 'Completed',
       installation: 'Installation Completed',
@@ -391,6 +395,68 @@ describe('project workspace sections (Step 2.7)', () => {
     expect((await timeline()).map((a) => a.subject)).toContain(
       'Status changed from Active to Lost (linked to the installation status)',
     );
+  });
+
+  it('a Closed or Lost project can only be changed by an Admin (API and database)', async () => {
+    const admin = as();
+    const operations = createCaller(
+      fakeContext(
+        {
+          status: 'authenticated',
+          user: fakeUser({
+            id: micky,
+            role: { key: 'operations', name: 'Operations' },
+            permissions: allPermissions(),
+          }),
+          firebaseUid: 'uid',
+        },
+        { db },
+      ),
+    );
+    await operations.projects.updateWarehouse({ id: projectId, values: { warehouse: null } });
+    await operations.projects.setStatus({ id: projectId, status: 'Lost' });
+
+    const refused = { code: 'FORBIDDEN', message: 'Only Admin can edit closed or lost projects.' };
+    await expect(
+      operations.projects.updateFinance({ id: projectId, values: { financeOption: null } }),
+    ).rejects.toMatchObject(refused);
+    await expect(
+      operations.projects.setStatus({ id: projectId, status: 'Active' }),
+    ).rejects.toMatchObject(refused);
+    await expect(
+      operations.projects.updateInstallerInvoice({
+        id: projectId,
+        values: { installerInvoiceNumber: 'INV-1' },
+      }),
+    ).rejects.toMatchObject(refused);
+
+    // Straight in the database, the guard refuses too.
+    await expect(
+      db.execute(sql`update projects set title = 'x' where id = ${projectId}`),
+    ).rejects.toThrow();
+    await expect(
+      db.execute(
+        sql`update project_installation set docs_status = 'x' where project_id = ${projectId}`,
+      ),
+    ).rejects.toThrow();
+
+    // An Admin can change it, and reopen it.
+    await admin.projects.updateInstallerInvoice({
+      id: projectId,
+      values: { installerInvoiceNumber: 'INV-1' },
+    });
+    await admin.projects.setStatus({ id: projectId, status: 'Active' });
+    await operations.projects.updateSite({
+      id: projectId,
+      values: {
+        title: 'Reopened',
+        streetAddress: '12 Church St',
+        suburb: 'Parramatta',
+        state: 'NSW',
+        postcode: '2150',
+      },
+    });
+    expect((await admin.projects.get({ id: projectId })).title).toBe('Reopened');
   });
 
   it('installer invoice: its own box, saved on the installation row', async () => {

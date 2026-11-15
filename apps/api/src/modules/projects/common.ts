@@ -4,7 +4,7 @@ import type { Db, Tx } from '../../db/client.ts';
 import { projects } from '../../db/schema/index.ts';
 import { diff, recordAudit, type Actor } from '../audit.ts';
 
-export type Ctx = { user: { id: string }; meta: Actor['meta'] };
+export type Ctx = { user: { id: string; role: { key: string } }; meta: Actor['meta'] };
 
 /**
  * The Project ID people see: the Lead ID of the lead it was converted from (locked from then on).
@@ -21,9 +21,22 @@ export const notFound = () =>
 
 export const actorOf = (ctx: Ctx): Actor => ({ userId: ctx.user.id, meta: ctx.meta });
 
-export async function editableProject(tx: Db | Tx, id: string) {
+/** Closed and Lost jobs are finished: only an Admin may change them (or reopen them). */
+export const CLOSED_PROJECT_STATUSES: readonly string[] = ['Closed', 'Lost'];
+export const ONLY_ADMIN_EDITS_CLOSED = 'Only Admin can edit closed or lost projects.';
+
+/**
+ * The project, for a change by `user`. A Closed or Lost project is refused unless the user is an
+ * Admin; for an Admin the transaction is marked (mms.admin) so the database guard lets it through.
+ */
+export async function editableProject(tx: Db | Tx, id: string, user: { role: { key: string } }) {
   const [project] = await tx.select().from(projects).where(eq(projects.id, id));
   if (!project || project.deletedAt) throw notFound();
+  if (user.role.key === 'admin') {
+    await tx.execute(sql`select set_config('mms.admin', 'on', true)`);
+  } else if (CLOSED_PROJECT_STATUSES.includes(project.status)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: ONLY_ADMIN_EDITS_CLOSED });
+  }
   return project;
 }
 

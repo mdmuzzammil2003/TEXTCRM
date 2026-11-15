@@ -96,7 +96,7 @@ export const sectionProcedures = {
     .input(sectionInput(ebVerificationSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        const project = await editableProject(tx, input.id);
+        const project = await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectEbVerification)
@@ -142,7 +142,7 @@ export const sectionProcedures = {
     .input(sectionInput(gridApplicationSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectGridApplications)
@@ -168,7 +168,7 @@ export const sectionProcedures = {
     .input(sectionInput(netMeterApplicationSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectGridApplications)
@@ -191,7 +191,7 @@ export const sectionProcedures = {
     .input(sectionInput(financeSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectFinance)
@@ -230,7 +230,7 @@ export const sectionProcedures = {
     .input(sectionInput(warehouseSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectWarehouse)
@@ -256,7 +256,7 @@ export const sectionProcedures = {
     .input(sectionInput(installationSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        const project = await editableProject(tx, input.id);
+        const project = await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectInstallation)
@@ -330,7 +330,7 @@ export const sectionProcedures = {
     .input(sectionInput(installerInvoiceSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectInstallation)
@@ -353,7 +353,7 @@ export const sectionProcedures = {
     .input(sectionInput(stcClaimSchema))
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
+        await editableProject(tx, input.id, ctx.user);
         const [existing] = await tx
           .select()
           .from(projectStcClaims)

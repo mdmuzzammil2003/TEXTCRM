@@ -47,6 +47,11 @@ export function useCan() {
     hasPermission(permissions, feature, action);
 }
 
+/** Whether the signed-in user has the Admin role (the API checks again). */
+export function useIsAdmin() {
+  return useProfile().role.key === 'admin';
+}
+
 /** Active staff for owner/assignee pickers; cached for five minutes. */
 export function useUsers() {
   const trpc = useTRPC();

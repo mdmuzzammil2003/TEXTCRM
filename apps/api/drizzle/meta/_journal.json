@@ -169,6 +169,13 @@
       "when": 1794771157945,
       "tag": "0023_project_installation_status_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794771477951,
+      "tag": "0024_closed_projects_admin_only",
+      "breakpoints": true
     }
   ]
 }
