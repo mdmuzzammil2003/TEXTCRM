@@ -72,14 +72,23 @@ describe('AppShell', () => {
     expect(within(nav).getByRole('link', { name: 'Settings' })).toBeDefined();
   });
 
-  it('collapses the sidebar and remembers it', async () => {
+  it('starts collapsed the first time; expanding and collapsing is remembered', async () => {
     renderShell('/dashboard', ['dashboard']);
     await screen.findByText('page /dashboard');
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
-    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeDefined();
-    expect(localStorage.getItem('mms-sidebar-collapsed')).toBe('true');
     // Labels stay available to screen readers when collapsed.
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeDefined();
+    expect(localStorage.getItem('mms-sidebar-collapsed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(localStorage.getItem('mms-sidebar-collapsed')).toBe('true');
+  });
+
+  it('opens expanded when that was the last choice', async () => {
+    localStorage.setItem('mms-sidebar-collapsed', 'false');
+    renderShell('/dashboard', ['dashboard']);
+    await screen.findByText('page /dashboard');
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeDefined();
   });
 
   it('opens the palette with Ctrl+K and jumps to a page', async () => {

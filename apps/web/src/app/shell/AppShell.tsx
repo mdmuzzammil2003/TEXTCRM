@@ -7,11 +7,12 @@ import { TopBar } from './TopBar.tsx';
 
 const COLLAPSED_KEY = 'mms-sidebar-collapsed';
 
+/** Collapsed (icons only) unless this browser remembers the person expanding it last time. */
 function readCollapsed(): boolean {
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === 'true';
+    return localStorage.getItem(COLLAPSED_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 
