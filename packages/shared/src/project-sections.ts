@@ -149,8 +149,6 @@ export const gridApplicationSchema = z
     appliedDate: optionalDate,
     approvalDate: optionalDate,
     rejectedDate: optionalDate,
-    energyRetailer: option,
-    retailerRef: reference,
   })
   .superRefine((grid, ctx) => {
     notInFuture(ctx, grid.appliedDate, 'appliedDate', 'applied date');
@@ -172,6 +170,17 @@ export const gridApplicationSchema = z
 
 export type GridApplicationInput = z.input<typeof gridApplicationSchema>;
 export type GridApplicationValues = z.output<typeof gridApplicationSchema>;
+
+// ── Net meter application ────────────────────────────────────────────────
+// The energy retailer's side of the connection. Stored with the grid application.
+
+export const netMeterApplicationSchema = z.object({
+  energyRetailer: option,
+  retailerRef: reference,
+});
+
+export type NetMeterApplicationInput = z.input<typeof netMeterApplicationSchema>;
+export type NetMeterApplicationValues = z.output<typeof netMeterApplicationSchema>;
 
 /** Whole days from one ISO date to another. */
 export function daysBetween(from: string, to: string): number {

@@ -178,6 +178,46 @@ describe('project workspace sections (Step 2.7)', () => {
     expect(await audits('update_grid')).toHaveLength(before);
   });
 
+  it('net meter application: saved on its own, without touching the grid application', async () => {
+    const api = as();
+    await expect(
+      api.projects.updateNetMeterApplication({
+        id: projectId,
+        values: { energyRetailer: 'Not a retailer' },
+      }),
+    ).rejects.toThrow(/not an available retailer/);
+
+    await api.projects.updateGridApplication({
+      id: projectId,
+      values: { electricityDistributor: 'Endeavour Energy', applicationRef: 'EE-1' },
+    });
+    await api.projects.updateNetMeterApplication({
+      id: projectId,
+      values: { energyRetailer: 'Origin Energy', retailerRef: 'ORG-77' },
+    });
+    // Saving the grid box again keeps the retailer, and the other way round.
+    await api.projects.updateGridApplication({
+      id: projectId,
+      values: { electricityDistributor: 'Endeavour Energy', applicationRef: 'EE-2' },
+    });
+    expect((await api.projects.get({ id: projectId })).grid).toMatchObject({
+      applicationRef: 'EE-2',
+      energyRetailer: 'Origin Energy',
+      retailerRef: 'ORG-77',
+    });
+    await api.projects.updateNetMeterApplication({
+      id: projectId,
+      values: { energyRetailer: 'AGL Energy', retailerRef: null },
+    });
+    expect((await api.projects.get({ id: projectId })).grid).toMatchObject({
+      electricityDistributor: 'Endeavour Energy',
+      applicationRef: 'EE-2',
+      energyRetailer: 'AGL Energy',
+      retailerRef: null,
+    });
+    expect(await audits('update_net_meter')).toHaveLength(2);
+  });
+
   it('finance: details need a finance option and the approval cannot exceed the price', async () => {
     const api = as();
     await expect(

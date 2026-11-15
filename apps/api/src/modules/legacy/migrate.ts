@@ -712,6 +712,15 @@ async function migrateProject(
             appliedDate: legacy.gridAppliedDate ?? null,
             approvalDate: legacy.gridApprovalDate ?? null,
             rejectedDate: legacy.gridRejectedDate ?? null,
+          },
+        }),
+    ],
+    [
+      'net meter application',
+      () =>
+        api.projects.updateNetMeterApplication({
+          id: projectId,
+          values: {
             energyRetailer: legacy.energyRetailer ?? null,
             retailerRef: value('retailerRef') ?? null,
           },

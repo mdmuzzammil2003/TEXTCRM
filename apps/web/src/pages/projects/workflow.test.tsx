@@ -26,7 +26,7 @@ const options = {
 describe('project workflow cards', () => {
   afterEach(cleanup);
 
-  it('EB verification shows each check, why it needs attention, and the score', async () => {
+  it('Project Validation shows each check, why it needs attention, and the score', async () => {
     renderPage(
       <EbVerificationCard
         editable

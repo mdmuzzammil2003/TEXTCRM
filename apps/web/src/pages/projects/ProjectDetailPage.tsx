@@ -46,6 +46,7 @@ import {
   FinanceCard,
   GridApplicationCard,
   InstallationCard,
+  NetMeterApplicationCard,
   OpenSolarCard,
   StcClaimCard,
   WarehouseCard,
@@ -85,7 +86,7 @@ const PROJECT_FIELD_LABELS: Record<string, string> = {
   depositReceivedDate: 'Deposit received',
   balanceDueDate: 'Balance due',
   customerInvoiceNumber: 'Invoice number',
-  // EB verification
+  // Project validation (electricity bill checks)
   customerNameMatch: 'Bill name matches',
   addressMatch: 'Bill address matches',
   meterMatch: 'Meter matches',
@@ -157,8 +158,9 @@ const PROJECT_FIELD_LABELS: Record<string, string> = {
 
 const PROJECT_ACTIONS: Record<string, string> = {
   update_system: 'updated the system design',
-  update_eb: 'updated the EB verification',
+  update_eb: 'updated the project validation',
   update_grid: 'updated the grid application',
+  update_net_meter: 'updated the net meter application',
   update_finance: 'updated finance',
   update_warehouse: 'updated warehouse & stock',
   update_installation: 'updated the installation',
@@ -415,6 +417,7 @@ function ProjectView({ project }: { project: Project }) {
             <div className="gap-6 xl:columns-2 [&>*]:mb-6 [&>*]:break-inside-avoid">
               <EbVerificationCard project={project} editable={editable} />
               <GridApplicationCard project={project} editable={editable} />
+              <NetMeterApplicationCard project={project} editable={editable} />
               <FinanceCard project={project} editable={editable} />
               <WarehouseCard project={project} editable={editable} />
               <InstallationCard project={project} editable={editable} />

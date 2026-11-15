@@ -5,6 +5,7 @@ import {
   financeSchema,
   formatAud,
   gridApplicationSchema,
+  netMeterApplicationSchema,
   installationSchema,
   openSolarSchema,
   stcClaimSchema,
@@ -15,6 +16,8 @@ import {
   type FinanceValues,
   type GridApplicationInput,
   type GridApplicationValues,
+  type NetMeterApplicationInput,
+  type NetMeterApplicationValues,
   type InstallationInput,
   type InstallationValues,
   type OpenSolarInput,
@@ -64,7 +67,7 @@ function NotConnected({ children }: { children: ReactNode }) {
   return <span className="text-fg-subtle">{children}</span>;
 }
 
-// ── EB verification ──────────────────────────────────────────────────────
+// ── Project validation (the electricity bill checks) ──────────────────────────────────────────────────────
 
 const CHECK_ICONS = {
   passed: <CircleCheck className="size-4 text-success-text" aria-label="Passed" />,
@@ -98,7 +101,7 @@ export function EbVerificationCard({ project, editable }: CardProps) {
   const verified = passed === project.ebChecks.length;
   return (
     <EditableSection
-      title="EB verification"
+      title="Project Validation"
       badge={
         <Badge tone={verified ? 'success' : passed > 0 ? 'warning' : 'neutral'} dot>
           {verified ? 'Verified' : `${String(passed)} of ${String(project.ebChecks.length)} passed`}
@@ -121,7 +124,7 @@ export function EbVerificationCard({ project, editable }: CardProps) {
           }}
           fields={EB_FIELDS}
           submit={(values) => update.mutateAsync({ id: project.id, values })}
-          success="EB verification saved"
+          success="Project validation saved"
           onDone={close}
         />
       )}
@@ -176,9 +179,6 @@ const GRID_FIELDS: FieldSpec<GridApplicationInput>[] = [
   { name: 'appliedDate', label: 'Applied', kind: 'date' },
   { name: 'approvalDate', label: 'Approved', kind: 'date' },
   { name: 'rejectedDate', label: 'Rejected', kind: 'date' },
-  { heading: 'Energy retailer' },
-  { name: 'energyRetailer', label: 'Retailer', kind: 'option', list: 'energyRetailers' },
-  { name: 'retailerRef', label: 'Retailer ref.', kind: 'text' },
 ];
 
 export function GridApplicationCard({ project, editable }: CardProps) {
@@ -201,8 +201,6 @@ export function GridApplicationCard({ project, editable }: CardProps) {
             appliedDate: grid?.appliedDate ?? '',
             approvalDate: grid?.approvalDate ?? '',
             rejectedDate: grid?.rejectedDate ?? '',
-            energyRetailer: grid?.energyRetailer ?? '',
-            retailerRef: grid?.retailerRef ?? '',
           }}
           fields={GRID_FIELDS}
           submit={(values) => update.mutateAsync({ id: project.id, values })}
@@ -227,7 +225,49 @@ export function GridApplicationCard({ project, editable }: CardProps) {
                     : `Waiting ${String(timing.days)} days`
                 : null,
             },
-            { label: 'Retailer', value: joined(grid.energyRetailer, grid.retailerRef) },
+          ]}
+        />
+      ) : (
+        NOT_STARTED
+      )}
+    </EditableSection>
+  );
+}
+
+// ── Net meter application ────────────────────────────────────────────────
+
+const NET_METER_FIELDS: FieldSpec<NetMeterApplicationInput>[] = [
+  { name: 'energyRetailer', label: 'Retailer', kind: 'option', list: 'energyRetailers' },
+  { name: 'retailerRef', label: 'Retailer ref.', kind: 'text' },
+];
+
+export function NetMeterApplicationCard({ project, editable }: CardProps) {
+  const trpc = useTRPC();
+  const update = useMutation(trpc.projects.updateNetMeterApplication.mutationOptions());
+  const grid = project.grid;
+  return (
+    <EditableSection
+      title="Net meter application"
+      editable={editable}
+      form={(close) => (
+        <SectionForm<NetMeterApplicationInput, NetMeterApplicationValues>
+          resolver={zodResolver(netMeterApplicationSchema)}
+          defaultValues={{
+            energyRetailer: grid?.energyRetailer ?? '',
+            retailerRef: grid?.retailerRef ?? '',
+          }}
+          fields={NET_METER_FIELDS}
+          submit={(values) => update.mutateAsync({ id: project.id, values })}
+          success="Net meter application saved"
+          onDone={close}
+        />
+      )}
+    >
+      {grid?.energyRetailer || grid?.retailerRef ? (
+        <DetailList
+          items={[
+            { label: 'Retailer', value: grid.energyRetailer },
+            { label: 'Retailer ref.', value: grid.retailerRef },
           ]}
         />
       ) : (

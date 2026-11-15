@@ -9,6 +9,7 @@ import {
   financeSchema,
   formatAud,
   gridApplicationSchema,
+  netMeterApplicationSchema,
   gridTiming,
   installationSchema,
   isOnFinance,
@@ -155,7 +156,6 @@ export const sectionProcedures = {
         await assertOptions(tx, values, existing, [
           ['electricityDistributors', 'electricityDistributor', 'DNSP'],
           ['gridApplicationStatuses', 'status', 'grid status'],
-          ['energyRetailers', 'energyRetailer', 'retailer'],
         ]);
         await saveSection(tx, ctx, input.id, 'update_grid', existing, values, () =>
           tx
@@ -164,6 +164,30 @@ export const sectionProcedures = {
             .onConflictDoUpdate({ target: projectGridApplications.projectId, set: values }),
         );
         await logStatus(tx, ctx, input.id, 'Grid application', existing?.status, values.status);
+        return { id: input.id };
+      }),
+    ),
+
+  /** The retailer fields of the grid application row, edited in their own box. */
+  updateNetMeterApplication: permissionProcedure('projects', 'edit')
+    .input(sectionInput(netMeterApplicationSchema))
+    .mutation(({ ctx, input }) =>
+      ctx.db.transaction(async (tx) => {
+        await editableProject(tx, input.id);
+        const [existing] = await tx
+          .select()
+          .from(projectGridApplications)
+          .where(eq(projectGridApplications.projectId, input.id));
+        const values = input.values;
+        await assertOptions(tx, values, existing, [
+          ['energyRetailers', 'energyRetailer', 'retailer'],
+        ]);
+        await saveSection(tx, ctx, input.id, 'update_net_meter', existing, values, () =>
+          tx
+            .insert(projectGridApplications)
+            .values({ projectId: input.id, ...values })
+            .onConflictDoUpdate({ target: projectGridApplications.projectId, set: values }),
+        );
         return { id: input.id };
       }),
     ),
