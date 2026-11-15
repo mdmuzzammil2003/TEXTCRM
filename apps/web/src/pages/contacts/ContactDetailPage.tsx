@@ -23,7 +23,8 @@ import {
 import { useState, type ReactNode } from 'react';
 import { ComposeButtons } from '../../components/messaging/ComposeDialogs.tsx';
 import { MessagesPanel } from '../../components/messaging/MessagesPanel.tsx';
-import { ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { EmailLinks } from '../../components/EmailLinks.tsx';
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { DetailList } from '../../components/DetailList.tsx';
@@ -185,6 +186,7 @@ function toEditable(address: Address): EditableAddress {
 }
 
 function ContactView({ contact }: { contact: Contact }) {
+  const activityTabs = useActivityTabs('activity');
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const can = useCan();
@@ -483,44 +485,59 @@ function ContactView({ contact }: { contact: Contact }) {
         <Card className="lg:col-span-2">
           <CardContent>
             {/* Open on the first tab with something in it; a brand-new contact opens on History. */}
-            <Tabs defaultValue="activity">
-              <TabsList>
-                <TabsTrigger value="activity">
-                  <StickyNote />
-                  Activity
-                </TabsTrigger>
-                {tabs.map((tab) => (
-                  <TabsTrigger key={tab.value} value={tab.value}>
-                    {tab.label}
-                    <span className="text-xs text-fg-subtle tabular-nums">{tab.count}</span>
+            <Tabs value={activityTabs.tab} onValueChange={activityTabs.setTab}>
+              <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
+                <TabsList className="border-b-0">
+                  <TabsTrigger value="activity">
+                    <StickyNote />
+                    Activity
                   </TabsTrigger>
-                ))}
-                {can('tickets', 'view') && (
-                  <TabsTrigger value="tickets">
-                    <LifeBuoy />
-                    Tickets
+                  {tabs.map((tab) => (
+                    <TabsTrigger key={tab.value} value={tab.value}>
+                      {tab.label}
+                      <span className="text-xs text-fg-subtle tabular-nums">{tab.count}</span>
+                    </TabsTrigger>
+                  ))}
+                  {can('tickets', 'view') && (
+                    <TabsTrigger value="tickets">
+                      <LifeBuoy />
+                      Tickets
+                    </TabsTrigger>
+                  )}
+                  <TabsTrigger value="messages">
+                    <MessageSquare />
+                    Messages
                   </TabsTrigger>
-                )}
-                <TabsTrigger value="messages">
-                  <MessageSquare />
-                  Messages
-                </TabsTrigger>
-                <TabsTrigger value="files">
-                  <Paperclip />
-                  Files
-                </TabsTrigger>
-                <TabsTrigger value="history">
-                  <History />
-                  History
-                </TabsTrigger>
-              </TabsList>
+                  <TabsTrigger value="files">
+                    <Paperclip />
+                    Files
+                  </TabsTrigger>
+                  <TabsTrigger value="history">
+                    <History />
+                    History
+                  </TabsTrigger>
+                </TabsList>
+                <ActivityQuickAdd
+                  entityType="contact"
+                  readOnly={archived}
+                  active={activityTabs.tab === 'activity' ? activityTabs.composing : null}
+                  onPick={activityTabs.compose}
+                  className="pb-1.5"
+                />
+              </div>
               {tabs.map((tab) => (
                 <TabsContent key={tab.value} value={tab.value}>
                   {tab.content}
                 </TabsContent>
               ))}
               <TabsContent value="activity">
-                <ActivityTimeline entityType="contact" entityId={contact.id} readOnly={archived} />
+                <ActivityTimeline
+                  entityType="contact"
+                  entityId={contact.id}
+                  readOnly={archived}
+                  composing={activityTabs.composing}
+                  onComposerClose={activityTabs.closeComposer}
+                />
               </TabsContent>
               {can('tickets', 'view') && (
                 <TabsContent value="tickets">

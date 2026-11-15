@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { ComposeButtons } from '../../components/messaging/ComposeDialogs.tsx';
 import { MessagesPanel } from '../../components/messaging/MessagesPanel.tsx';
-import { ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
 import { HistoryList } from '../../components/HistoryList.tsx';
 import { errorMessage } from '../../lib/errors.ts';
@@ -179,6 +180,7 @@ function BackLink() {
 }
 
 function ProjectView({ project }: { project: Project }) {
+  const activityTabs = useActivityTabs('job');
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const can = useCan();
@@ -366,35 +368,47 @@ function ProjectView({ project }: { project: Project }) {
           <SystemDesignCard project={project} editable={editable} />
           <PaymentsCard project={project} editable={editable} />
         </div>
-        <Tabs defaultValue="job" className="lg:col-span-2">
-          <TabsList>
-            <TabsTrigger value="job">
-              <ClipboardList />
-              Job
-            </TabsTrigger>
-            <TabsTrigger value="activity">
-              <StickyNote />
-              Activity
-            </TabsTrigger>
-            {canViewTickets && (
-              <TabsTrigger value="tickets">
-                <LifeBuoy />
-                Tickets
+        <Tabs
+          value={activityTabs.tab}
+          onValueChange={activityTabs.setTab}
+          className="lg:col-span-2"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
+            <TabsList className="border-b-0">
+              <TabsTrigger value="job">
+                <ClipboardList />
+                Job
               </TabsTrigger>
-            )}
-            <TabsTrigger value="messages">
-              <MessageSquare />
-              Messages
-            </TabsTrigger>
-            <TabsTrigger value="files">
-              <Paperclip />
-              Files
-            </TabsTrigger>
-            <TabsTrigger value="history">
-              <History />
-              History
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger value="activity">
+                <StickyNote />
+                Activity
+              </TabsTrigger>
+              {canViewTickets && (
+                <TabsTrigger value="tickets">
+                  <LifeBuoy />
+                  Tickets
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="messages">
+                <MessageSquare />
+                Messages
+              </TabsTrigger>
+              <TabsTrigger value="files">
+                <Paperclip />
+                Files
+              </TabsTrigger>
+              <TabsTrigger value="history">
+                <History />
+                History
+              </TabsTrigger>
+            </TabsList>
+            <ActivityQuickAdd
+              entityType="project"
+              active={activityTabs.tab === 'activity' ? activityTabs.composing : null}
+              onPick={activityTabs.compose}
+              className="pb-1.5"
+            />
+          </div>
           <TabsContent value="job">
             {/* Workflow order, flowing down the first column then the second. */}
             <div className="gap-6 xl:columns-2 [&>*]:mb-6 [&>*]:break-inside-avoid">
@@ -410,7 +424,12 @@ function ProjectView({ project }: { project: Project }) {
           <TabsContent value="activity">
             <Card>
               <CardContent>
-                <ActivityTimeline entityType="project" entityId={project.id} />
+                <ActivityTimeline
+                  entityType="project"
+                  entityId={project.id}
+                  composing={activityTabs.composing}
+                  onComposerClose={activityTabs.closeComposer}
+                />
               </CardContent>
             </Card>
           </TabsContent>

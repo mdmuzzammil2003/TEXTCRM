@@ -18,7 +18,8 @@ import {
 import { useState } from 'react';
 import { ComposeButtons } from '../../components/messaging/ComposeDialogs.tsx';
 import { MessagesPanel } from '../../components/messaging/MessagesPanel.tsx';
-import { ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { EmailLinks } from '../../components/EmailLinks.tsx';
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { DetailList } from '../../components/DetailList.tsx';
@@ -154,6 +155,7 @@ function StatusPipeline({
 }
 
 function LeadView({ lead }: { lead: Lead }) {
+  const activityTabs = useActivityTabs('activity');
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const can = useCan();
@@ -437,32 +439,47 @@ function LeadView({ lead }: { lead: Lead }) {
         <div className="flex min-w-0 flex-col gap-6">
           <Card>
             <CardContent>
-              <Tabs defaultValue="activity">
-                <TabsList>
-                  <TabsTrigger value="activity">
-                    <StickyNote />
-                    Activity
-                    {lead.openTasks > 0 && (
-                      <Badge tone="accent" className="ml-1">
-                        {lead.openTasks} open
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="messages">
-                    <MessageSquare />
-                    Messages
-                  </TabsTrigger>
-                  <TabsTrigger value="files">
-                    <Paperclip />
-                    Files
-                  </TabsTrigger>
-                  <TabsTrigger value="history">
-                    <History />
-                    History
-                  </TabsTrigger>
-                </TabsList>
+              <Tabs value={activityTabs.tab} onValueChange={activityTabs.setTab}>
+                <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
+                  <TabsList className="border-b-0">
+                    <TabsTrigger value="activity">
+                      <StickyNote />
+                      Activity
+                      {lead.openTasks > 0 && (
+                        <Badge tone="accent" className="ml-1">
+                          {lead.openTasks} open
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="messages">
+                      <MessageSquare />
+                      Messages
+                    </TabsTrigger>
+                    <TabsTrigger value="files">
+                      <Paperclip />
+                      Files
+                    </TabsTrigger>
+                    <TabsTrigger value="history">
+                      <History />
+                      History
+                    </TabsTrigger>
+                  </TabsList>
+                  <ActivityQuickAdd
+                    entityType="lead"
+                    readOnly={deleted}
+                    active={activityTabs.tab === 'activity' ? activityTabs.composing : null}
+                    onPick={activityTabs.compose}
+                    className="pb-1.5"
+                  />
+                </div>
                 <TabsContent value="activity">
-                  <ActivityTimeline entityType="lead" entityId={lead.id} readOnly={deleted} />
+                  <ActivityTimeline
+                    entityType="lead"
+                    entityId={lead.id}
+                    readOnly={deleted}
+                    composing={activityTabs.composing}
+                    onComposerClose={activityTabs.closeComposer}
+                  />
                 </TabsContent>
                 <TabsContent value="messages">
                   <MessagesPanel entityType="lead" entityId={lead.id} />

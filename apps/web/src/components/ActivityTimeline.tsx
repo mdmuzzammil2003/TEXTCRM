@@ -18,9 +18,11 @@ import {
   StickyNote,
   Trash2,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useProfile } from '../auth/auth-context.ts';
+import { ACTIVITY_KINDS as KINDS, type ActivityKind } from './activity-tabs.ts';
 import { errorMessage } from '../lib/errors.ts';
 import { formatDateTime, formatRelative } from '../lib/format.ts';
 import { useCan, useUsers } from '../lib/hooks.ts';
@@ -41,18 +43,13 @@ import {
   Input,
   Select,
   Skeleton,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   Textarea,
   toast,
   Tooltip,
 } from '../ui/index.ts';
 
 type Activity = RouterOutputs['activities']['list'][number];
-const KINDS = ['note', 'call', 'task', 'meeting'] as const;
-type Kind = (typeof KINDS)[number];
+type Kind = ActivityKind;
 
 /** 'YYYY-MM-DDTHH:mm' in the browser's time zone, for <input type="datetime-local">. */
 function localInputValue(date: Date): string {
@@ -71,15 +68,37 @@ function tomorrowAtNine(): string {
   return localInputValue(date);
 }
 
+const KIND_LABELS: Record<Kind, string> = {
+  note: 'Note',
+  call: 'Call',
+  task: 'Task',
+  meeting: 'Meeting',
+};
+const KIND_ICONS: Record<Kind, ReactNode> = {
+  note: <StickyNote />,
+  call: <Phone />,
+  task: <ListTodo />,
+  meeting: <UsersRound />,
+};
+
 const OUTCOMES = CALL_OUTCOMES.map((outcome) => ({ value: outcome, label: outcome }));
 
-function Composer({ entityType, entityId }: { entityType: ActivityEntityType; entityId: string }) {
+function Composer({
+  entityType,
+  entityId,
+  kind,
+  onClose,
+}: {
+  entityType: ActivityEntityType;
+  entityId: string;
+  kind: Kind;
+  onClose: () => void;
+}) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const profile = useProfile();
   const users = useUsers();
   const create = useMutation(trpc.activities.create.mutationOptions());
-  const [kind, setKind] = useState<Kind>('note');
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [subject, setSubject] = useState('');
@@ -140,8 +159,9 @@ function Composer({ entityType, entityId }: { entityType: ActivityEntityType; en
         queryClient.invalidateQueries(trpc.activities.pathFilter()),
         queryClient.invalidateQueries(trpc.leads.get.pathFilter()),
       ]);
-      toast({ title: `${kind[0]?.toUpperCase() ?? ''}${kind.slice(1)} added`, tone: 'success' });
+      toast({ title: `${KIND_LABELS[kind]} added`, tone: 'success' });
       reset();
+      onClose();
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -161,36 +181,22 @@ function Composer({ entityType, entityId }: { entityType: ActivityEntityType; en
 
   return (
     <div className="rounded-lg border border-line bg-surface-2/40 p-3">
-      <Tabs
-        value={kind}
-        onValueChange={(value) => {
-          const next = KINDS.find((option) => option === value);
-          if (next) setKind(next);
-          setError(null);
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="note">
-            <StickyNote />
-            Note
-          </TabsTrigger>
-          <TabsTrigger value="call">
-            <Phone />
-            Call
-          </TabsTrigger>
-          <TabsTrigger value="task">
-            <ListTodo />
-            Task
-          </TabsTrigger>
-          <TabsTrigger value="meeting">
-            <UsersRound />
-            Meeting
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="note" className="pt-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          {KIND_ICONS[kind]}
+          New {kind}
+        </p>
+        <IconButton label="Close" size="sm" variant="ghost" onClick={onClose}>
+          <X />
+        </IconButton>
+      </div>
+      {kind === 'note' && (
+        <div className="flex flex-col gap-3">
           {notes('What happened? e.g. Sent the proposal, customer wants a battery quote.')}
-        </TabsContent>
-        <TabsContent value="call" className="flex flex-col gap-3 pt-3">
+        </div>
+      )}
+      {kind === 'call' && (
+        <div className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Outcome">
               {(props) => (
@@ -228,8 +234,10 @@ function Composer({ entityType, entityId }: { entityType: ActivityEntityType; en
             </Field>
           </div>
           {notes('What was discussed?')}
-        </TabsContent>
-        <TabsContent value="task" className="flex flex-col gap-3 pt-3">
+        </div>
+      )}
+      {kind === 'task' && (
+        <div className="flex flex-col gap-3">
           <Field label="Task">
             {(props) => (
               <Input
@@ -269,8 +277,10 @@ function Composer({ entityType, entityId }: { entityType: ActivityEntityType; en
               )}
             </Field>
           </div>
-        </TabsContent>
-        <TabsContent value="meeting" className="flex flex-col gap-3 pt-3">
+        </div>
+      )}
+      {kind === 'meeting' && (
+        <div className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="About">
               {(props) => (
@@ -298,14 +308,17 @@ function Composer({ entityType, entityId }: { entityType: ActivityEntityType; en
             </Field>
           </div>
           {notes('Notes from the meeting')}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
       {error && (
         <Alert tone="danger" className="mt-3">
           {error}
         </Alert>
       )}
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
           variant="primary"
           size="sm"
@@ -479,10 +492,15 @@ export function ActivityTimeline({
   entityType,
   entityId,
   readOnly = false,
+  composing = null,
+  onComposerClose = () => undefined,
 }: {
   entityType: ActivityEntityType;
   entityId: string;
   readOnly?: boolean;
+  /** The kind picked in the record's toolbar ({@link ActivityQuickAdd}); null hides the composer. */
+  composing?: Kind | null;
+  onComposerClose?: () => void;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -527,7 +545,15 @@ export function ActivityTimeline({
 
   return (
     <div className="flex flex-col gap-5">
-      {canEdit && <Composer entityType={entityType} entityId={entityId} />}
+      {canEdit && composing && (
+        <Composer
+          key={composing}
+          entityType={entityType}
+          entityId={entityId}
+          kind={composing}
+          onClose={onComposerClose}
+        />
+      )}
       {query.isPending ? (
         <div className="flex flex-col gap-4">
           {[0, 1, 2].map((row) => (
@@ -564,6 +590,46 @@ export function ActivityTimeline({
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+/** Note / Call / Task / Meeting buttons, shown on the same row as the record's tabs. */
+export function ActivityQuickAdd({
+  entityType,
+  readOnly = false,
+  active,
+  onPick,
+  className,
+}: {
+  entityType: ActivityEntityType;
+  readOnly?: boolean;
+  active: Kind | null;
+  onPick: (kind: Kind) => void;
+  className?: string;
+}) {
+  const can = useCan();
+  if (readOnly || !can(ACTIVITY_ENTITY_FEATURE[entityType], 'edit')) return null;
+  return (
+    <div
+      role="toolbar"
+      aria-label="Log activity"
+      className={cn('flex flex-wrap gap-1.5', className)}
+    >
+      {KINDS.map((kind) => (
+        <Button
+          key={kind}
+          size="sm"
+          variant={active === kind ? 'secondary' : 'ghost'}
+          aria-pressed={active === kind}
+          onClick={() => {
+            onPick(kind);
+          }}
+        >
+          {KIND_ICONS[kind]}
+          {KIND_LABELS[kind]}
+        </Button>
+      ))}
     </div>
   );
 }

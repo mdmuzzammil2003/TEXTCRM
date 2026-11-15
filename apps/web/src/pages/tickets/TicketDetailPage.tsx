@@ -14,7 +14,8 @@ import {
 import { useState } from 'react';
 import { ComposeButtons } from '../../components/messaging/ComposeDialogs.tsx';
 import { MessagesPanel } from '../../components/messaging/MessagesPanel.tsx';
-import { ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTimeline.tsx';
+import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { DetailList } from '../../components/DetailList.tsx';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
 import { errorMessage } from '../../lib/errors.ts';
@@ -192,6 +193,7 @@ function DetailsCard({ ticket, editable }: { ticket: Ticket; editable: boolean }
 }
 
 function TicketView({ ticket }: { ticket: Ticket }) {
+  const activityTabs = useActivityTabs('activity');
   const editable = useCan()('tickets', 'edit');
   return (
     <div className="flex flex-col gap-6">
@@ -233,25 +235,38 @@ function TicketView({ ticket }: { ticket: Ticket }) {
             <WarrantyClaimsCard ticket={ticket} editable={editable} />
             <InstallerVisitsCard ticket={ticket} editable={editable} />
           </div>
-          <Tabs defaultValue="activity">
-            <TabsList>
-              <TabsTrigger value="activity">
-                <StickyNote />
-                Activity
-              </TabsTrigger>
-              <TabsTrigger value="messages">
-                <MessageSquare />
-                Messages
-              </TabsTrigger>
-              <TabsTrigger value="files">
-                <Paperclip />
-                Files
-              </TabsTrigger>
-            </TabsList>
+          <Tabs value={activityTabs.tab} onValueChange={activityTabs.setTab}>
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
+              <TabsList className="border-b-0">
+                <TabsTrigger value="activity">
+                  <StickyNote />
+                  Activity
+                </TabsTrigger>
+                <TabsTrigger value="messages">
+                  <MessageSquare />
+                  Messages
+                </TabsTrigger>
+                <TabsTrigger value="files">
+                  <Paperclip />
+                  Files
+                </TabsTrigger>
+              </TabsList>
+              <ActivityQuickAdd
+                entityType="ticket"
+                active={activityTabs.tab === 'activity' ? activityTabs.composing : null}
+                onPick={activityTabs.compose}
+                className="pb-1.5"
+              />
+            </div>
             <TabsContent value="activity">
               <Card>
                 <CardContent>
-                  <ActivityTimeline entityType="ticket" entityId={ticket.id} />
+                  <ActivityTimeline
+                    entityType="ticket"
+                    entityId={ticket.id}
+                    composing={activityTabs.composing}
+                    onComposerClose={activityTabs.closeComposer}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
