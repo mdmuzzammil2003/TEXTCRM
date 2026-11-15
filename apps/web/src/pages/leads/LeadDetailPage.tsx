@@ -24,6 +24,7 @@ import { EmailLinks } from '../../components/EmailLinks.tsx';
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { DetailList } from '../../components/DetailList.tsx';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
+import { LEAD_FIELD_LABELS } from './lead-labels.ts';
 import { HistoryList } from '../../components/HistoryList.tsx';
 import { errorMessage } from '../../lib/errors.ts';
 import { formatDate, fullName } from '../../lib/format.ts';
@@ -54,28 +55,6 @@ import { PricingCard, SystemCard } from './LeadQuoteCards.tsx';
 import { statusTone } from './lead-status.ts';
 
 type Lead = RouterOutputs['leads']['get'];
-
-const LEAD_FIELD_LABELS: Record<string, string> = {
-  firstName: 'First name',
-  lastName: 'Last name',
-  email: 'Email',
-  secondaryEmail: 'Secondary email',
-  mobile: 'Mobile',
-  secondaryMobile: 'Other phone',
-  streetAddress: 'Street',
-  suburb: 'Suburb',
-  state: 'State',
-  postcode: 'Postcode',
-  area: 'Area',
-  nearestBigCity: 'Nearest city',
-  platform: 'Platform',
-  source: 'Source',
-  status: 'Status',
-  ownerUserId: 'Sales person',
-  leadDate: 'Lead date',
-  notes: 'Notes',
-  contactId: 'Contact',
-};
 
 const UNASSIGNED = '__none';
 

@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { aliasedTable, and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { aliasedTable, and, asc, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   ACTIVITY_ENTITY_FEATURE,
@@ -14,7 +14,7 @@ import { activities, contacts, leads, users } from '../../db/schema/index.ts';
 import { protectedProcedure, router } from '../../trpc/trpc.ts';
 import type { AuthUser } from '../../auth/types.ts';
 import { recordAudit } from '../audit.ts';
-import { assertEntityExists } from './service.ts';
+import { assertEntityExists, linkedLeadId } from './service.ts';
 
 function assertAllowed(user: AuthUser, entityType: ActivityEntityType, action: PermissionAction) {
   if (!hasPermission(user.permissions, ACTIVITY_ENTITY_FEATURE[entityType], action)) {
@@ -49,9 +49,13 @@ const entityInput = z.object({
 });
 
 export const activitiesRouter = router({
-  /** A record's timeline, newest first. */
+  /**
+   * A record's timeline, newest first. A project's also shows the activity of the lead it was
+   * converted from (`source` says where an entry was logged).
+   */
   list: protectedProcedure.input(entityInput).query(async ({ ctx, input }) => {
     assertAllowed(ctx.user, input.entityType, 'view');
+    const leadId = await linkedLeadId(ctx.db, ctx.user, input.entityType, input.entityId);
     const author = aliasedTable(users, 'author');
     const assignee = aliasedTable(users, 'assignee');
     const rows = await ctx.db
@@ -65,8 +69,15 @@ export const activitiesRouter = router({
       .leftJoin(assignee, eq(assignee.id, activities.assignedUserId))
       .where(
         and(
-          eq(activities.entityType, input.entityType),
-          eq(activities.entityId, input.entityId),
+          or(
+            and(
+              eq(activities.entityType, input.entityType),
+              eq(activities.entityId, input.entityId),
+            ),
+            leadId
+              ? and(eq(activities.entityType, 'lead'), eq(activities.entityId, leadId))
+              : undefined,
+          ),
           isNull(activities.deletedAt),
         ),
       )
@@ -88,6 +99,10 @@ export const activitiesRouter = router({
       assigneeName,
       authorUserId: activity.authorUserId,
       authorName,
+      source:
+        activity.entityType === input.entityType && activity.entityId === input.entityId
+          ? null
+          : { entityType: activity.entityType, entityId: activity.entityId },
     }));
   }),
 

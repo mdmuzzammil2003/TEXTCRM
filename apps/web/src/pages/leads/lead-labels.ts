@@ -1,0 +1,22 @@
+/** Field name → label for a lead's History (lead page, and the project it became). */
+export const LEAD_FIELD_LABELS: Record<string, string> = {
+  firstName: 'First name',
+  lastName: 'Last name',
+  email: 'Email',
+  secondaryEmail: 'Secondary email',
+  mobile: 'Mobile',
+  secondaryMobile: 'Other phone',
+  streetAddress: 'Street',
+  suburb: 'Suburb',
+  state: 'State',
+  postcode: 'Postcode',
+  area: 'Area',
+  nearestBigCity: 'Nearest city',
+  platform: 'Platform',
+  source: 'Source',
+  status: 'Status',
+  ownerUserId: 'Sales person',
+  leadDate: 'Lead date',
+  notes: 'Notes',
+  contactId: 'Contact',
+};

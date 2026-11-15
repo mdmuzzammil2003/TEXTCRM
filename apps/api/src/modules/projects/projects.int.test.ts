@@ -166,6 +166,39 @@ describe('lead → project conversion and projects', () => {
     ] as const;
   }
 
+  it("shows the lead's activity and history on the project; a role without leads sees only the project's", async () => {
+    const { id: leadId } = await readyLead();
+    await as().activities.create({
+      entityType: 'lead',
+      entityId: leadId,
+      type: 'note',
+      body: 'Customer wants the install before Christmas',
+    });
+    const { id } = await as().projects.convertLead({ leadId });
+    await as().activities.create({
+      entityType: 'project',
+      entityId: id,
+      type: 'note',
+      body: 'Booked the site visit',
+    });
+
+    const timeline = await as().activities.list({ entityType: 'project', entityId: id });
+    const fromLead = timeline.find((a) => a.body === 'Customer wants the install before Christmas');
+    const own = timeline.find((a) => a.body === 'Booked the site visit');
+    expect(fromLead?.source).toEqual({ entityType: 'lead', entityId: leadId });
+    expect(own?.source).toBeNull();
+
+    const project = await as().projects.get({ id });
+    expect(project.leadHistory.map((h) => h.action)).toContain('create');
+
+    const noLeads = allPermissions();
+    noLeads.leads = { ...noLeads.leads, view: false };
+    const limited = as(noLeads);
+    const limitedTimeline = await limited.activities.list({ entityType: 'project', entityId: id });
+    expect(limitedTimeline.some((a) => a.source !== null)).toBe(false);
+    expect((await limited.projects.get({ id })).leadHistory).toEqual([]);
+  });
+
   it('copies every inverter of the lead to the project exactly: model, count, type and order', async () => {
     const { id: leadId } = await readyLead();
     const [a, b] = await twoInverters();

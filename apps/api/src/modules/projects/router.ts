@@ -317,6 +317,11 @@ export const projectsRouter = router({
         entityHistory(ctx.db, 'project', project.id),
         loadSections(ctx.db, project),
       ]);
+      // The history of the lead it was converted from, for roles that may see leads.
+      const leadHistory =
+        project.leadId && hasPermission(ctx.user.permissions, 'leads', 'view')
+          ? await entityHistory(ctx.db, 'lead', project.leadId)
+          : [];
       const [panel, battery, inverters] = await Promise.all([
         hardwareOption(ctx.db, 'panel', system?.panelId),
         hardwareOption(ctx.db, 'battery', system?.batteryId),
@@ -359,6 +364,7 @@ export const projectsRouter = router({
           : null,
         ...sections,
         history,
+        leadHistory,
       };
     }),
 

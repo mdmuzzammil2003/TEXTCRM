@@ -33,6 +33,7 @@ import {
   signatureView,
 } from './compose.ts';
 import { recipientOf, sendEmail, sendSms, webhookUrl } from './service.ts';
+import { linkedLeadId } from '../activities/service.ts';
 
 // SMS (Step 5.3) and email (Step 5.2) from a record. Sending needs edit on that record;
 // reading its messages needs view.
@@ -149,12 +150,17 @@ export const messagingRouter = router({
   history: protectedProcedure.input(messageListSchema).query(async ({ ctx, input }) => {
     assertAllowed(ctx.user, input.entityType, 'view');
     const { contactId } = await recipientOf(ctx.db, input.entityType, input.entityId);
+    // A project also shows the messages of the lead it came from.
+    const leadId = await linkedLeadId(ctx.db, ctx.user, input.entityType, input.entityId);
     const visible = (entityType: ActivityEntityType | null) =>
       entityType === null ||
       hasPermission(ctx.user.permissions, ACTIVITY_ENTITY_FEATURE[entityType], 'view');
     const forSms: SQL | undefined = or(
       and(eq(smsMessages.entityType, input.entityType), eq(smsMessages.entityId, input.entityId)),
       contactId ? eq(smsMessages.contactId, contactId) : undefined,
+      leadId
+        ? and(eq(smsMessages.entityType, 'lead'), eq(smsMessages.entityId, leadId))
+        : undefined,
     );
     const forEmail: SQL | undefined = or(
       and(
@@ -162,6 +168,9 @@ export const messagingRouter = router({
         eq(emailMessages.entityId, input.entityId),
       ),
       contactId ? eq(emailMessages.contactId, contactId) : undefined,
+      leadId
+        ? and(eq(emailMessages.entityType, 'lead'), eq(emailMessages.entityId, leadId))
+        : undefined,
     );
     const [sms, emails] = await Promise.all([
       ctx.db

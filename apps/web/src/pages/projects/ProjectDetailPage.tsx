@@ -19,6 +19,7 @@ import { ActivityQuickAdd, ActivityTimeline } from '../../components/ActivityTim
 import { useActivityTabs } from '../../components/activity-tabs.ts';
 import { FilesPanel } from '../../components/FilesPanel.tsx';
 import { HistoryList } from '../../components/HistoryList.tsx';
+import { LEAD_FIELD_LABELS } from '../leads/lead-labels.ts';
 import { errorMessage } from '../../lib/errors.ts';
 import { fullName } from '../../lib/format.ts';
 import { useCan, useUsers } from '../../lib/hooks.ts';
@@ -474,6 +475,12 @@ function ProjectView({ project }: { project: Project }) {
                   labels={PROJECT_FIELD_LABELS}
                   actions={PROJECT_ACTIONS}
                 />
+                {project.leadHistory.length > 0 && (
+                  <section aria-label="History of the lead" className="mt-6 flex flex-col gap-3">
+                    <h3 className="text-sm font-semibold">From the lead</h3>
+                    <HistoryList entries={project.leadHistory} labels={LEAD_FIELD_LABELS} />
+                  </section>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

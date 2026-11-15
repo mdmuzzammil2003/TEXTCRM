@@ -20,6 +20,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { useState, type ReactNode } from 'react';
 import { useProfile } from '../auth/auth-context.ts';
 import { ACTIVITY_KINDS as KINDS, type ActivityKind } from './activity-tabs.ts';
@@ -440,6 +441,15 @@ function Entry({
             />
           )}
           <p className={cn('min-w-0 flex-1', activity.type === 'system' && 'text-fg-muted')}>
+            {activity.source?.entityType === 'lead' && (
+              <Link
+                to="/leads/$leadId"
+                params={{ leadId: activity.source.entityId }}
+                className="mr-2 align-middle"
+              >
+                <Badge>From lead</Badge>
+              </Link>
+            )}
             {title}
           </p>
           {canRemove && activity.type !== 'system' && (
