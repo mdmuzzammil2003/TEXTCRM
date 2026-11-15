@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { emptyPermissionMatrix, type LeadInput, type PermissionMatrix } from '@mms/shared';
-import { auditLog, contactAddresses, contacts, projects } from '../../db/schema/index.ts';
+import { auditLog, contactAddresses, contacts, leads, projects } from '../../db/schema/index.ts';
 import { loadLegacySeedInput, seed } from '../../db/seed.ts';
 import { createTestDb, truncateAll } from '../../test/db.ts';
 import { allPermissions, fakeContext, fakeUser } from '../../test/fakes.ts';
@@ -342,6 +342,14 @@ describe('lead → project conversion and projects', () => {
     await expect(
       api.leads.update({ id: noRef, values: { ...olivia, leadRef: otherRef } }),
     ).rejects.toThrow('This Lead ID already exists.');
+
+    // Digits only, in the API and in the database itself.
+    await expect(
+      api.leads.update({ id: noRef, values: { ...olivia, leadRef: 'OS-7700001' } }),
+    ).rejects.toThrow('Lead ID must contain only numbers.');
+    await expect(
+      db.update(leads).set({ leadRef: '77-01' }).where(eq(leads.id, noRef)),
+    ).rejects.toThrow();
 
     // Setting it makes the lead convertible; leaving it out of an edit keeps it.
     await api.leads.update({ id: noRef, values: { ...olivia, leadRef: '7700001' } });

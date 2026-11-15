@@ -1,5 +1,11 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import { LEAD_IMPORT_FIELDS, mapRow, mappingProblems } from '@mms/shared';
+import {
+  isValidLeadRef,
+  LEAD_ID_ONLY_NUMBERS,
+  LEAD_IMPORT_FIELDS,
+  mapRow,
+  mappingProblems,
+} from '@mms/shared';
 import type { Db } from '../../db/client.ts';
 import {
   leads,
@@ -173,6 +179,14 @@ export async function syncSheetSource(
           sheetLeadId: null,
           message: 'No Lead ID — skipped. Give the row a Lead ID and it is picked up next run.',
         });
+        continue;
+      }
+      if (!isValidLeadRef(sheetLeadId)) {
+        fail(
+          row.rowNumber,
+          sheetLeadId,
+          `Lead ID "${sheetLeadId}" — ${LEAD_ID_ONLY_NUMBERS} Not imported; fix it in the sheet.`,
+        );
         continue;
       }
       const earlier = seen.get(sheetLeadId);

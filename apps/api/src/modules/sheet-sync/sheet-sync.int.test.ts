@@ -34,9 +34,9 @@ const HEADER = [
 const col = (name: string) => HEADER.indexOf(name);
 
 // prettier-ignore
-const OLIVIA = ['L-1', '3/11/2026', 'Micky', 'Contacted', 'Olivia', 'Nguyen', '0412 345 678', 'olivia@example.com', '12 Rose St', 'Parramatta', 'NSW', '2150', '6.6', 'Call after 5'];
+const OLIVIA = ['101', '3/11/2026', 'Micky', 'Contacted', 'Olivia', 'Nguyen', '0412 345 678', 'olivia@example.com', '12 Rose St', 'Parramatta', 'NSW', '2150', '6.6', 'Call after 5'];
 // prettier-ignore
-const JACK = ['L-2', '1/11/2026', '', '', 'Jack', 'Smith', '0423 456 789', 'jack@example.com', '4 Elm Ave', 'Toowong', 'QLD', '4066', '', ''];
+const JACK = ['102', '1/11/2026', '', '', 'Jack', 'Smith', '0423 456 789', 'jack@example.com', '4 Elm Ave', 'Toowong', 'QLD', '4066', '', ''];
 
 const withCell = (row: string[], name: string, value: string) =>
   row.map((cell, i) => (i === col(name) ? value : cell));
@@ -138,7 +138,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
       createdCount: 2,
       errorCount: 0,
     });
-    const olivia = await leadById('L-1');
+    const olivia = await leadById('101');
     expect(olivia).toMatchObject({
       sheetSourceId: sourceId,
       firstName: 'Olivia',
@@ -151,7 +151,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
       .select()
       .from(activities)
       .where(eq(activities.entityId, olivia?.id ?? ''));
-    expect(timeline?.subject).toBe('Created from the live sheet "Website leads" (Lead ID L-1)');
+    expect(timeline?.subject).toBe('Created from the live sheet "Website leads" (Lead ID 101)');
     const [audit] = await db
       .select()
       .from(auditLog)
@@ -167,7 +167,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     await sync();
     rows = [withCell(OLIVIA, 'Primary Mobile', '0499 111 222'), JACK];
     expect(await sync()).toMatchObject({ updatedCount: 1 });
-    const olivia = await leadById('L-1');
+    const olivia = await leadById('101');
     expect(olivia).toMatchObject({ mobile: '+61499111222', crmEditedAt: null });
     const subjects = (
       await db
@@ -179,16 +179,16 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
 
     // A CRM user edits the lead — from now on the sheet never changes it.
     await as().leads.setStatus({ id: olivia?.id ?? '', status: 'Proposal Sent' });
-    expect((await leadById('L-1'))?.crmEditedAt).not.toBeNull();
+    expect((await leadById('101'))?.crmEditedAt).not.toBeNull();
     rows = [
       withCell(withCell(OLIVIA, 'Primary Mobile', '0499 111 222'), 'Suburb', 'Westmead'),
       JACK,
     ];
     expect(await sync()).toMatchObject({ updatedCount: 0, errorCount: 0 });
-    expect((await leadById('L-1'))?.suburb).toBe('Parramatta');
+    expect((await leadById('101'))?.suburb).toBe('Parramatta');
 
     // Any CRM edit counts: the full edit form too.
-    const jack = await leadById('L-2');
+    const jack = await leadById('102');
     await as().leads.update({
       id: jack?.id ?? '',
       values: {
@@ -200,12 +200,12 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     });
     rows = [OLIVIA, withCell(JACK, 'Suburb', 'Indooroopilly')];
     await sync();
-    expect((await leadById('L-2'))?.suburb).not.toBe('Indooroopilly');
+    expect((await leadById('102'))?.suburb).not.toBe('Indooroopilly');
   });
 
   it('rule 3: status, sales rep and notes come from the sheet on create only', async () => {
     await sync();
-    const before = await leadById('L-1');
+    const before = await leadById('101');
     expect(before).toMatchObject({
       status: 'Contacted',
       ownerUserId: userId,
@@ -224,7 +224,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     changed = withCell(changed, 'Suburb', 'Westmead');
     rows = [changed, JACK];
     await sync();
-    const after = await leadById('L-1');
+    const after = await leadById('101');
     expect(after).toMatchObject({
       status: 'Contacted',
       ownerUserId: userId,
@@ -242,12 +242,22 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     expect(await sync()).toMatchObject({ rowsRead: 1, errorCount: 0 });
     expect((await allLeads()).filter((lead) => lead.deletedAt === null)).toHaveLength(2);
 
-    const olivia = await leadById('L-1');
+    const olivia = await leadById('101');
     await as().leads.remove({ id: olivia?.id ?? '' });
     rows = [withCell(OLIVIA, 'Suburb', 'Westmead'), JACK];
     expect(await sync()).toMatchObject({ createdCount: 0, updatedCount: 0 });
     expect(await allLeads()).toHaveLength(2);
-    expect((await leadById('L-1'))?.deletedAt).not.toBeNull();
+    expect((await leadById('101'))?.deletedAt).not.toBeNull();
+  });
+
+  it('a Lead ID that is not all digits is reported for that row; the rest still sync', async () => {
+    rows = [withCell(OLIVIA, 'Lead ID', 'OS-101'), JACK];
+    const run = await sync();
+    expect(run).toMatchObject({ createdCount: 1, errorCount: 1 });
+    expect((await rowErrors(run.runId))[0]?.message).toBe(
+      'Lead ID "OS-101" — Lead ID must contain only numbers. Not imported; fix it in the sheet.',
+    );
+    expect((await allLeads()).map((lead) => lead.leadRef)).toEqual(['102']);
   });
 
   it('rule 5: rows without a Lead ID are skipped and reported', async () => {
@@ -265,12 +275,12 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
   });
 
   it('rule 6: every run is logged with its counts and per-row errors', async () => {
-    rows = [OLIVIA, withCell(JACK, 'Lead Date', '31/2/2026'), withCell(JACK, 'Lead ID', 'L-1')];
+    rows = [OLIVIA, withCell(JACK, 'Lead Date', '31/2/2026'), withCell(JACK, 'Lead ID', '101')];
     const run = await sync();
     expect(run).toMatchObject({ status: 'completed', rowsRead: 3, createdCount: 1, errorCount: 2 });
     expect((await rowErrors(run.runId)).map((e) => [e.rowNumber, e.message])).toEqual([
       [3, expect.stringContaining('31/2/2026') as string],
-      [4, 'Lead ID L-1 is also on row 2 — only that row is used. Give each row its own Lead ID.'],
+      [4, 'Lead ID 101 is also on row 2 — only that row is used. Give each row its own Lead ID.'],
     ]);
 
     // A run that can't read the sheet is logged as failed, with the reason.
@@ -312,21 +322,21 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     const run = await sync();
     expect(run).toMatchObject({ createdCount: 1, linkedCount: 1 });
     expect(await allLeads()).toHaveLength(2);
-    expect(await leadById('L-1')).toMatchObject({ id: existing, sheetSourceId: sourceId });
+    expect(await leadById('101')).toMatchObject({ id: existing, sheetSourceId: sourceId });
     expect((await rowErrors(run.runId))[0]?.message).toContain('Linked to Olivia Nguyen');
 
     // The sheet didn't create it, so the CRM owns it: later runs neither re-link nor update it.
     rows = [withCell(OLIVIA, 'Suburb', 'Westmead'), JACK];
     expect(await sync()).toMatchObject({ createdCount: 0, linkedCount: 0, updatedCount: 0 });
-    expect((await leadById('L-1'))?.suburb).toBeNull();
+    expect((await leadById('101'))?.suburb).toBeNull();
   });
 
   it('rule 7: two Lead IDs for the same customer — the second is flagged, not created', async () => {
     await sync();
-    rows = [OLIVIA, JACK, withCell(withCell(OLIVIA, 'Lead ID', 'L-9'), 'Primary Mobile', '')];
+    rows = [OLIVIA, JACK, withCell(withCell(OLIVIA, 'Lead ID', '109'), 'Primary Mobile', '')];
     const run = await sync();
     expect(run).toMatchObject({ createdCount: 0, errorCount: 1 });
-    expect((await rowErrors(run.runId))[0]?.message).toContain('Same customer as Lead ID L-1');
+    expect((await rowErrors(run.runId))[0]?.message).toContain('Same customer as Lead ID 101');
     expect(await allLeads()).toHaveLength(2);
   });
 
@@ -334,15 +344,15 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     // Jack was typed in with his OpenSolar ID before the sheet had him: same ID, same lead.
     const { id: typedIn } = await as().leads.create({
       values: {
-        leadRef: 'L-2',
+        leadRef: '102',
         firstName: 'Jack',
         lastName: 'Smyth',
         email: 'jack.other@example.com',
       },
     });
-    // Someone else's lead holds L-1 but was deleted.
+    // Someone else's lead holds 101 but was deleted.
     const { id: deleted } = await as().leads.create({
-      values: { leadRef: 'L-1', firstName: 'Old', lastName: 'Entry', email: 'old@example.com' },
+      values: { leadRef: '101', firstName: 'Old', lastName: 'Entry', email: 'old@example.com' },
     });
     await as().leads.remove({ id: deleted });
 
@@ -350,7 +360,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     expect(run).toMatchObject({ createdCount: 0, linkedCount: 1, errorCount: 1 });
     expect(await allLeads()).toHaveLength(2);
     // Linked by the ID, but the CRM still owns it: the sheet doesn't overwrite the name.
-    expect(await leadById('L-2')).toMatchObject({
+    expect(await leadById('102')).toMatchObject({
       id: typedIn,
       sheetSourceId: sourceId,
       lastName: 'Smyth',
@@ -359,7 +369,7 @@ describe('live leads sync (Step 3.3, §1.8 rules 1–7)', () => {
     expect(messages).toContainEqual(
       expect.stringContaining('belongs to Old Entry, a deleted lead'),
     );
-    expect(messages).toContainEqual(expect.stringContaining('already in the CRM with Lead ID L-2'));
+    expect(messages).toContainEqual(expect.stringContaining('already in the CRM with Lead ID 102'));
   });
 
   it('rule 7 never replaces a Lead ID: the same customer with another ID is flagged', async () => {

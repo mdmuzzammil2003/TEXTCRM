@@ -1,0 +1,1 @@
+ALTER TABLE "leads" ADD CONSTRAINT "leads_lead_id_numeric" CHECK ("leads"."lead_id" ~ '^[0-9]+$');

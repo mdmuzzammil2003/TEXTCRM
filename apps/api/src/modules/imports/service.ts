@@ -5,6 +5,8 @@ import {
   mapRow,
   type ImportAction,
   type ImportTarget,
+  isValidLeadRef,
+  LEAD_ID_ONLY_NUMBERS,
 } from '@mms/shared';
 import { leadWithRef } from '../leads/lead-ref.ts';
 import type { Db, Tx } from '../../db/client.ts';
@@ -108,6 +110,12 @@ async function decideLead(
   const repeat = sameAsEarlier(leadRowKey(record), seen, rowNumber);
   if (repeat) return repeat;
 
+  if (record.sheetLeadId && !isValidLeadRef(record.sheetLeadId)) {
+    return {
+      action: 'error',
+      message: `Lead ID "${record.sheetLeadId}" — ${LEAD_ID_ONLY_NUMBERS}`,
+    };
+  }
   // Lead IDs are unique across the CRM: one held by a live sheet's lead or a deleted lead is
   // reported, never taken over or duplicated.
   if (record.sheetLeadId) {

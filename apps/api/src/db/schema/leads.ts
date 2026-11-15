@@ -102,6 +102,8 @@ export const leads = pgTable(
     uniqueIndex('leads_lead_id_unique')
       .on(t.leadRef)
       .where(sql`${t.leadRef} is not null`),
+    // Digits only (OpenSolar project IDs); empty is allowed.
+    check('leads_lead_id_numeric', sql`${t.leadRef} ~ '^[0-9]+$'`),
     check('leads_email_lowercase', lowercaseEmailCheck(t.email)),
     check('leads_mobile_e164', e164Check(t.mobile)),
     check('leads_secondary_mobile_e164', e164Check(t.secondaryMobile)),

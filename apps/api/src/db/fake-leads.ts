@@ -13,9 +13,12 @@ import { requireDatabaseUrl } from '../env.ts';
 
 /**
  * Made-up leads for performance testing (Step 2.2: "10,000 seeded fake leads page and filter
- * instantly"). Every fake lead has a Lead ID (`leadRef`) starting with "fake-" so `--remove` can
+ * instantly"). Every fake lead has a 12-digit Lead ID starting with 999999 (FAKE_PREFIX) so `--remove` can
  * delete exactly them. Never run against production.
  */
+
+/** Fake leads' Lead IDs: 999999 + six digits, far above real OpenSolar IDs. */
+const FAKE_PREFIX = '999999';
 
 const FIRST = [
   'Olivia',
@@ -106,7 +109,7 @@ export function fakeLeads(count: number, ownerIds: string[], today = new Date())
       ownerUserId:
         ownerIds.length > 0 && i % 4 !== 0 ? (ownerIds[i % ownerIds.length] ?? null) : null,
       leadDate: date.toISOString().slice(0, 10),
-      leadRef: `fake-${String(i)}`,
+      leadRef: `${FAKE_PREFIX}${String(i).padStart(6, '0')}`,
     };
   });
 }
@@ -134,7 +137,7 @@ async function main() {
     if (values.remove) {
       const removed = await db
         .delete(leads)
-        .where(like(leads.leadRef, 'fake-%'))
+        .where(like(leads.leadRef, `${FAKE_PREFIX}______`))
         .returning({ id: leads.id });
       console.log(`Removed ${String(removed.length)} fake leads.`);
       return;

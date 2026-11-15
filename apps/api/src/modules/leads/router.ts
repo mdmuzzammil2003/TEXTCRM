@@ -590,7 +590,11 @@ export const leadsRouter = router({
             action: 'create',
             entityType: 'lead',
             entityId: created.id,
-            after: { ...leadRow(values), leadRef: values.leadRef ?? null, contactId: contact?.id ?? null },
+            after: {
+              ...leadRow(values),
+              leadRef: values.leadRef ?? null,
+              contactId: contact?.id ?? null,
+            },
           });
           return created;
         }),

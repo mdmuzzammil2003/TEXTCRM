@@ -301,7 +301,7 @@ function LeadForm({ lead, onDone }: { lead?: EditableLead; onDone: (id: string) 
                 ? 'Locked: this lead is now a project, and this is its Project ID.'
                 : lead?.sheetSourceId
                   ? 'Comes from the live sheet — change it there.'
-                  : 'The OpenSolar project ID, e.g. 7628533. Needed to convert to a project.'
+                  : 'Numbers only — the OpenSolar project ID, e.g. 7628533. Needed to convert to a project.'
             }
             className="sm:col-span-2"
           >
@@ -309,6 +309,7 @@ function LeadForm({ lead, onDone }: { lead?: EditableLead; onDone: (id: string) 
               <Input
                 {...props}
                 {...textInput(field)}
+                inputMode="numeric"
                 autoComplete="off"
                 readOnly={Boolean(lead?.convertedAt ?? lead?.sheetSourceId)}
               />

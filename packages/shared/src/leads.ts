@@ -30,11 +30,18 @@ const isoDate = z.iso.date({ error: 'Enter a date.' });
  * The Lead ID: typed in (in practice the OpenSolar project ID) or read from a sheet — never made
  * up by the CRM. Optional, but a lead needs one to be converted; it then becomes the Project ID.
  */
+export const LEAD_ID_ONLY_NUMBERS = 'Lead ID must contain only numbers.';
+
+/** A Lead ID is digits only (the database checks the same: lead_id ~ '^[0-9]+$'). */
+export function isValidLeadRef(value: string): boolean {
+  return /^[0-9]+$/.test(value);
+}
+
 export const leadRefField = z
   .string()
   .trim()
   .max(100, 'A Lead ID can be at most 100 characters.')
-  .regex(/^[A-Za-z0-9._-]*$/, 'A Lead ID has letters, numbers, dots or dashes only — no spaces.')
+  .regex(/^[0-9]*$/, LEAD_ID_ONLY_NUMBERS)
   .nullish()
   // Left out = keep the lead's current Lead ID; empty = no Lead ID.
   .transform((value) => (value === undefined ? undefined : value || null));

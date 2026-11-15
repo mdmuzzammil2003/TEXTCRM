@@ -3,6 +3,7 @@ import {
   areDistinctProperties,
   businessToday,
   findDuplicateLead,
+  isValidLeadRef,
   leadInputSchema,
   normaliseStreet,
   type DuplicateCandidate,
@@ -95,6 +96,20 @@ describe('lead input', () => {
     const lead = leadInputSchema.parse({ firstName: 'Olivia', mobile: '0412 345 678', state: '' });
     expect(lead).toMatchObject({ mobile: '+61412345678', state: null, status: 'New' });
     expect(leadInputSchema.safeParse({ firstName: 'Olivia' }).success).toBe(false);
+  });
+
+  it('takes a Lead ID of digits only, keeps it when left out and clears it when empty', () => {
+    const base = { firstName: 'Olivia', mobile: '0412 345 678' };
+    expect(leadInputSchema.parse({ ...base, leadRef: ' 7628533 ' }).leadRef).toBe('7628533');
+    expect(leadInputSchema.parse(base).leadRef).toBeUndefined();
+    expect(leadInputSchema.parse({ ...base, leadRef: '' }).leadRef).toBeNull();
+    for (const bad of ['L-1', '7628-533', '76 28533', '7628.533', 'abc']) {
+      const result = leadInputSchema.safeParse({ ...base, leadRef: bad });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('Lead ID must contain only numbers.');
+    }
+    expect(isValidLeadRef('0012')).toBe(true);
+    expect(isValidLeadRef('12a')).toBe(false);
   });
 
   it("knows today's date in Sydney", () => {
