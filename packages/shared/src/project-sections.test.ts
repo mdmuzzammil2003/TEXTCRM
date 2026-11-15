@@ -5,7 +5,6 @@ import {
   financeSchema,
   gridApplicationSchema,
   gridTiming,
-  openSolarSchema,
   stcTotals,
 } from './project-sections.ts';
 
@@ -107,14 +106,6 @@ describe('section rules', () => {
       true,
     );
     expect(financeSchema.safeParse({ financeCompany: 'Brighte' }).success).toBe(false);
-  });
-
-  it('OpenSolar: only https links; signed needs a date and a date needs signed', () => {
-    expect(openSolarSchema.safeParse({ signedUrl: 'javascript:alert(1)' }).success).toBe(false);
-    expect(openSolarSchema.safeParse({ contractSignedDate: '2026-10-01' }).success).toBe(false);
-    expect(
-      openSolarSchema.safeParse({ contractSigned: true, contractSignedDate: '2026-10-01' }).success,
-    ).toBe(true);
   });
 
   it('completedMonth names the month of the date', () => {

@@ -7,7 +7,6 @@ import {
   gridApplicationSchema,
   netMeterApplicationSchema,
   installationSchema,
-  openSolarSchema,
   stcClaimSchema,
   warehouseSchema,
   type EbVerificationInput,
@@ -20,8 +19,6 @@ import {
   type NetMeterApplicationValues,
   type InstallationInput,
   type InstallationValues,
-  type OpenSolarInput,
-  type OpenSolarValues,
   type StcClaimInput,
   type StcClaimValues,
   type WarehouseInput,
@@ -29,7 +26,7 @@ import {
 } from '@mms/shared';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleAlert, CircleCheck, CircleDashed, ExternalLink } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleDashed } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DetailList } from '../../components/DetailList.tsx';
 import { formatDate } from '../../lib/format.ts';
@@ -716,97 +713,6 @@ export function StcClaimCard({ project, editable }: CardProps) {
               label: 'BridgeSelect',
               value: stc.bridgeselectSyncStatus ? (
                 joined(stc.bridgeselectSyncStatus, stc.bridgeselectError)
-              ) : (
-                <NotConnected>Not connected yet (integration in Phase 5)</NotConnected>
-              ),
-            },
-          ]}
-        />
-      ) : (
-        NOT_STARTED
-      )}
-    </EditableSection>
-  );
-}
-
-// ── OpenSolar ────────────────────────────────────────────────────────────
-
-const OPENSOLAR_FIELDS: FieldSpec<OpenSolarInput>[] = [
-  { name: 'openSolarProjectId', label: 'OpenSolar project ID', kind: 'text' },
-  { name: 'proposalId', label: 'Proposal ID', kind: 'text' },
-  {
-    name: 'signedUrl',
-    label: 'Signed proposal link',
-    kind: 'text',
-    placeholder: 'https://',
-    wide: true,
-  },
-  { name: 'contractSigned', label: 'Contract', kind: 'checkbox', text: 'Signed by the customer' },
-  { name: 'contractSignedDate', label: 'Signed on', kind: 'date' },
-];
-
-export function OpenSolarCard({ project, editable }: CardProps) {
-  const trpc = useTRPC();
-  const update = useMutation(trpc.projects.updateOpenSolar.mutationOptions());
-  const openSolar = project.openSolar;
-  return (
-    <EditableSection
-      title="OpenSolar"
-      badge={
-        openSolar?.contractSigned ? (
-          <Badge tone="success" dot>
-            Contract signed
-          </Badge>
-        ) : null
-      }
-      editable={editable}
-      description="Linked by hand until the OpenSolar integration (Phase 5) syncs it."
-      form={(close) => (
-        <SectionForm<OpenSolarInput, OpenSolarValues>
-          resolver={zodResolver(openSolarSchema)}
-          defaultValues={{
-            openSolarProjectId: openSolar?.openSolarProjectId ?? '',
-            proposalId: openSolar?.proposalId ?? '',
-            signedUrl: openSolar?.signedUrl ?? '',
-            contractSigned: openSolar?.contractSigned ?? false,
-            contractSignedDate: openSolar?.contractSignedDate ?? '',
-          }}
-          fields={OPENSOLAR_FIELDS}
-          submit={(values) => update.mutateAsync({ id: project.id, values })}
-          success="OpenSolar saved"
-          onDone={close}
-        />
-      )}
-    >
-      {openSolar ? (
-        <DetailList
-          items={[
-            { label: 'Project ID', value: openSolar.openSolarProjectId },
-            { label: 'Proposal ID', value: openSolar.proposalId },
-            {
-              label: 'Signed proposal',
-              value: openSolar.signedUrl && (
-                <a
-                  href={openSolar.signedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-accent-text hover:underline"
-                >
-                  Open
-                  <ExternalLink className="size-3" />
-                </a>
-              ),
-            },
-            {
-              label: 'Contract',
-              value: openSolar.contractSigned
-                ? joined('Signed', day(openSolar.contractSignedDate))
-                : 'Not signed',
-            },
-            {
-              label: 'Sync',
-              value: openSolar.lastSyncedAt ? (
-                `Last synced ${formatDate(openSolar.lastSyncedAt)}`
               ) : (
                 <NotConnected>Not connected yet (integration in Phase 5)</NotConnected>
               ),

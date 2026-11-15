@@ -5,7 +5,7 @@ import { businessToday } from './leads.ts';
 import { optionalDate, wholeNumberField } from './projects.ts';
 
 // The project workspace sections of §1.4 that follow the sale: EB verification, grid
-// application, finance, warehouse, installation, STC claim and OpenSolar (Step 2.7).
+// application, finance, warehouse, installation, and STC claim (Step 2.7).
 // Dropdown fields hold option values; the server checks them against the option lists.
 
 const option = optionalText(100);
@@ -415,59 +415,3 @@ export function stcTotals(stc: {
     internalValueAud: value(stc.internalStcRateAud),
   };
 }
-
-// ── OpenSolar ────────────────────────────────────────────────────────────
-
-const openSolarId = z
-  .string()
-  .trim()
-  .nullish()
-  .transform((value, ctx) => {
-    if (!value) return null;
-    if (!/^[A-Za-z0-9-]{1,50}$/.test(value)) {
-      ctx.addIssue({ code: 'custom', message: 'Use the ID exactly as OpenSolar shows it.' });
-      return z.NEVER;
-    }
-    return value;
-  });
-
-export const openSolarSchema = z
-  .object({
-    openSolarProjectId: openSolarId,
-    proposalId: openSolarId,
-    signedUrl: z
-      .string()
-      .trim()
-      .max(2000)
-      .nullish()
-      .transform((value, ctx) => {
-        if (!value) return null;
-        if (!z.url({ protocol: /^https$/ }).safeParse(value).success) {
-          ctx.addIssue({ code: 'custom', message: 'Paste the full https:// link.' });
-          return z.NEVER;
-        }
-        return value;
-      }),
-    contractSigned: z.boolean().default(false),
-    contractSignedDate: optionalDate,
-  })
-  .superRefine((openSolar, ctx) => {
-    if (openSolar.contractSigned && !openSolar.contractSignedDate) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['contractSignedDate'],
-        message: 'When was it signed?',
-      });
-    }
-    if (!openSolar.contractSigned && openSolar.contractSignedDate) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['contractSigned'],
-        message: 'Tick "Contract signed" or clear the date.',
-      });
-    }
-    notInFuture(ctx, openSolar.contractSignedDate, 'contractSignedDate', 'signed date');
-  });
-
-export type OpenSolarInput = z.input<typeof openSolarSchema>;
-export type OpenSolarValues = z.output<typeof openSolarSchema>;

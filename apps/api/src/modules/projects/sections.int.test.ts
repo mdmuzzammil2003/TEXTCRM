@@ -382,36 +382,6 @@ describe('project workspace sections (Step 2.7)', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('OpenSolar: the signed date round-trips and needs the box ticked', async () => {
-    const api = as();
-    await expect(
-      api.projects.updateOpenSolar({ id: projectId, values: { contractSigned: true } }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-    await expect(
-      api.projects.updateOpenSolar({
-        id: projectId,
-        values: { signedUrl: 'http://example.com/contract' },
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-
-    const values = {
-      openSolarProjectId: '4471102',
-      signedUrl: 'https://example.com/contract',
-      contractSigned: true,
-      contractSignedDate: '2026-10-28',
-    };
-    await api.projects.updateOpenSolar({ id: projectId, values });
-    const project = await api.projects.get({ id: projectId });
-    expect(project.openSolar).toMatchObject({
-      openSolarProjectId: '4471102',
-      contractSigned: true,
-      contractSignedDate: '2026-10-28',
-    });
-    expect((await timeline()).map((a) => a.subject)).toContain('Contract signed (OpenSolar)');
-    await api.projects.updateOpenSolar({ id: projectId, values });
-    expect(await audits('update_opensolar')).toHaveLength(1);
-  });
-
   it('needs projects:edit to change a section', async () => {
     const viewOnly = emptyPermissionMatrix();
     viewOnly.projects.view = true;

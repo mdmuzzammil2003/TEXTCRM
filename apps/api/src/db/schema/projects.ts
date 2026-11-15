@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { day, id, money, timestamps, tstz } from './_columns.ts';
 import { companies, contacts } from './contacts.ts';
 import { hardwareBatteries, hardwareInverters, hardwarePanels } from './hardware.ts';
@@ -239,16 +239,5 @@ export const projectStcClaims = pgTable('project_stc_claims', {
   bridgeselectSyncStatus: text(),
   bridgeselectSyncedAt: tstz(),
   bridgeselectError: text(),
-  ...timestamps,
-});
-
-export const projectOpenSolar = pgTable('project_opensolar', {
-  projectId: projectIdPk(),
-  openSolarProjectId: text(),
-  proposalId: text(),
-  signedUrl: text(),
-  contractSigned: boolean().notNull().default(false),
-  contractSignedAt: tstz(),
-  lastSyncedAt: tstz(),
   ...timestamps,
 });

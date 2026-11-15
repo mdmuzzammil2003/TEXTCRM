@@ -2,7 +2,6 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import {
-  businessToday,
   completedMonth,
   ebCheckResults,
   ebVerificationSchema,
@@ -13,7 +12,6 @@ import {
   gridTiming,
   installationSchema,
   isOnFinance,
-  openSolarSchema,
   stcClaimSchema,
   stcTotals,
   warehouseSchema,
@@ -26,7 +24,6 @@ import {
   projectFinance,
   projectGridApplications,
   projectInstallation,
-  projectOpenSolar,
   projectPricing,
   projectStcClaims,
   projectWarehouse,
@@ -92,9 +89,6 @@ async function logStatus(
 }
 
 const sectionInput = <S extends z.ZodType>(values: S) => z.object({ id: z.uuid(), values });
-
-/** A date at midday Sydney time, so it reads back as the same calendar day. */
-const middayInSydney = (date: string) => new Date(`${date}T02:00:00Z`);
 
 export const sectionProcedures = {
   updateEbVerification: permissionProcedure('projects', 'edit')
@@ -341,53 +335,6 @@ export const sectionProcedures = {
         return { id: input.id };
       }),
     ),
-
-  updateOpenSolar: permissionProcedure('projects', 'edit')
-    .input(sectionInput(openSolarSchema))
-    .mutation(({ ctx, input }) =>
-      ctx.db.transaction(async (tx) => {
-        await editableProject(tx, input.id);
-        const [existing] = await tx
-          .select()
-          .from(projectOpenSolar)
-          .where(eq(projectOpenSolar.projectId, input.id));
-        const { contractSignedDate, ...rest } = input.values;
-        // Keep the stored moment when the day didn't change, so re-saving isn't a "change".
-        const sameDay =
-          existing?.contractSignedAt &&
-          businessToday(existing.contractSignedAt) === contractSignedDate;
-        const values = {
-          ...rest,
-          contractSignedAt: contractSignedDate
-            ? sameDay
-              ? existing.contractSignedAt
-              : middayInSydney(contractSignedDate)
-            : null,
-        };
-        const changes = await saveSection(
-          tx,
-          ctx,
-          input.id,
-          'update_opensolar',
-          existing,
-          values,
-          () =>
-            tx
-              .insert(projectOpenSolar)
-              .values({ projectId: input.id, ...values })
-              .onConflictDoUpdate({ target: projectOpenSolar.projectId, set: values }),
-        );
-        if (changes && values.contractSigned && !existing?.contractSigned) {
-          await logSystemActivity(tx, {
-            entityType: 'project',
-            entityId: input.id,
-            authorUserId: ctx.user.id,
-            subject: 'Contract signed (OpenSolar)',
-          });
-        }
-        return { id: input.id };
-      }),
-    ),
 };
 
 /** Every post-sale section of one project, with the values worked out on the server. */
@@ -397,7 +344,7 @@ export async function loadSections(db: Db, project: Project) {
     .from(users)
     .innerJoin(projectEbVerification, eq(projectEbVerification.verifiedByUserId, users.id))
     .where(eq(projectEbVerification.projectId, project.id));
-  const [[eb], [verifier], [grid], [finance], [warehouse], [installation], [stc], [openSolar]] =
+  const [[eb], [verifier], [grid], [finance], [warehouse], [installation], [stc]] =
     await Promise.all([
       db
         .select()
@@ -421,7 +368,6 @@ export async function loadSections(db: Db, project: Project) {
         .leftJoin(users, eq(users.id, projectInstallation.bookedByUserId))
         .where(eq(projectInstallation.projectId, project.id)),
       db.select().from(projectStcClaims).where(eq(projectStcClaims.projectId, project.id)),
-      db.select().from(projectOpenSolar).where(eq(projectOpenSolar.projectId, project.id)),
     ]);
 
   const checks = ebCheckResults(eb ?? {}, project.phase);
@@ -452,16 +398,6 @@ export async function loadSections(db: Db, project: Project) {
           ...sectionValues(stc),
           bridgeselectSyncedAt: stc.bridgeselectSyncedAt?.toISOString() ?? null,
           totals: stcTotals(stc),
-        }
-      : null,
-    openSolar: openSolar
-      ? {
-          ...sectionValues(openSolar),
-          contractSignedAt: openSolar.contractSignedAt?.toISOString() ?? null,
-          contractSignedDate: openSolar.contractSignedAt
-            ? businessToday(openSolar.contractSignedAt)
-            : null,
-          lastSyncedAt: openSolar.lastSyncedAt?.toISOString() ?? null,
         }
       : null,
   };

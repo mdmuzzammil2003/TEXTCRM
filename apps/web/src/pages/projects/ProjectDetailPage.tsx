@@ -47,7 +47,6 @@ import {
   GridApplicationCard,
   InstallationCard,
   NetMeterApplicationCard,
-  OpenSolarCard,
   StcClaimCard,
   WarehouseCard,
 } from './ProjectWorkflow.tsx';
@@ -148,7 +147,7 @@ const PROJECT_FIELD_LABELS: Record<string, string> = {
   adminChargesAud: 'STC admin charges',
   customerStcRateAud: 'Customer STC rate',
   internalStcRateAud: 'Internal STC rate',
-  // OpenSolar
+  // OpenSolar section (removed) — kept so older history entries still read well
   openSolarProjectId: 'OpenSolar project',
   proposalId: 'OpenSolar proposal',
   signedUrl: 'Signed proposal link',
@@ -422,7 +421,6 @@ function ProjectView({ project }: { project: Project }) {
               <WarehouseCard project={project} editable={editable} />
               <InstallationCard project={project} editable={editable} />
               <StcClaimCard project={project} editable={editable} />
-              <OpenSolarCard project={project} editable={editable} />
             </div>
           </TabsContent>
           <TabsContent value="activity">

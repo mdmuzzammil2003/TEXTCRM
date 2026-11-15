@@ -141,6 +141,13 @@
       "when": 1794760685213,
       "tag": "0019_project_drop_sales_order_number",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794761173988,
+      "tag": "0020_project_drop_opensolar",
+      "breakpoints": true
     }
   ]
 }
