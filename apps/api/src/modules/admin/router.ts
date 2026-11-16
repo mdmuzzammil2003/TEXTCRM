@@ -41,7 +41,7 @@ import {
 import { diff, recordAudit, type Actor } from '../audit.ts';
 import { containsPattern } from '../search.ts';
 import { reassignOpenLeads, reassignPreview, reassignTarget } from './reassign.ts';
-import { userLinks } from './user-links.ts';
+import { deleteUser } from './delete-user.ts';
 
 // Settings → admin (Step 2.10). Guards that keep the CRM usable: there is always at least one
 // active admin, nobody can lock themselves out, the Admin role always has every permission,
@@ -208,25 +208,15 @@ const usersRouter = router({
    * Their open leads move to their manager (or the primary admin) in the same transaction —
    * if that fails, they stay active. Their records and history stay.
    */
-  /** Before a permanent delete: what the user is linked to (empty = they can be deleted). */
-  deletePreview: adminOnlyProcedure
-    .input(z.object({ id: z.uuid() }))
-    .query(async ({ ctx, input }) => {
-      await loadUser(ctx.db, input.id);
-      return { links: await userLinks(ctx.db, input.id) };
-    }),
-
   /**
-   * Admin only: deletes a user for good. Only for someone with no footprint in the CRM (e.g.
-   * invited by mistake): anyone linked to leads, the audit log, the timeline etc. is refused —
-   * deleting would blank out who did what — and should be deactivated instead. Never yourself,
-   * never the last active admin. Their own settings (drafts, signature, saved views, Gmail
-   * connection) go with them. The audit log keeps a 'purge' entry.
+   * Admin only: deletes a user for good. Never yourself, never the last active admin. What they
+   * own or are assigned becomes Unassigned and their name stays on the history they made (see
+   * deleteUser). Their sessions are revoked.
    */
   permanentlyDelete: adminOnlyProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const removed = await ctx.db.transaction(async (tx) => {
+      const { removed, result } = await ctx.db.transaction(async (tx) => {
         const [locked] = await tx
           .select({ id: users.id })
           .from(users)
@@ -238,19 +228,7 @@ const usersRouter = router({
         if (roleKey === ADMIN_ROLE && user.isActive && (await activeAdmins(tx, user.id)) === 0) {
           throw bad(`${user.name} is the only active admin. Make someone else an admin first.`);
         }
-        if ((await userLinks(tx, user.id)).length > 0) {
-          throw bad(
-            'This user has linked records (leads, audit logs, etc.) and cannot be deleted. Deactivate them instead.',
-          );
-        }
-        await tx.delete(users).where(eq(users.id, user.id));
-        await recordAudit(tx, actorOf(ctx), {
-          action: 'purge',
-          entityType: 'user',
-          entityId: user.id,
-          before: { email: user.email, name: user.name, role: roleKey, isActive: user.isActive },
-        });
-        return user;
+        return { removed: user, result: await deleteUser(tx, actorOf(ctx), user, roleKey) };
       });
       // Their Firebase sessions end too (the next request is refused regardless: no such user).
       if (removed.firebaseUid && ctx.sessions) {
@@ -260,7 +238,7 @@ const usersRouter = router({
           ctx.log.warn({ err: error, userId: removed.id }, 'Could not revoke Firebase sessions');
         }
       }
-      return { id: removed.id };
+      return { id: removed.id, ...result };
     }),
 
   setActive: permissionProcedure('users', 'edit')

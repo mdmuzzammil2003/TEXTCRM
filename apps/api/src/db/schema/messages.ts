@@ -170,9 +170,8 @@ export const emailAttachments = pgTable(
   'email_attachments',
   {
     id: id(),
-    uploadedByUserId: uuid()
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Null once the uploader's user is deleted: a sent email keeps its attachments. */
+    uploadedByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
     emailMessageId: uuid().references(() => emailMessages.id, { onDelete: 'set null' }),
     draftId: uuid().references(() => emailDrafts.id, { onDelete: 'set null' }),
     fileName: text().notNull(),

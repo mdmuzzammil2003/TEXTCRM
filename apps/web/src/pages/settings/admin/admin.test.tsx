@@ -108,41 +108,44 @@ describe('admin settings', () => {
     });
   });
 
-  it('Admin deletes a user with no records; a linked user is refused before any call', async () => {
+  it('Admin deletes a user after the permanent warning, and hears what became Unassigned', async () => {
     const calls: TrpcCall[] = [];
-    const open = async (preview: { links: { label: string; n: number }[] }) => {
-      cleanup();
-      renderPage(<UsersPage />, {
-        path: '/settings/users',
-        auth: signedIn(),
-        calls,
-        responses: {
-          'admin.users.list': users,
-          'admin.users.roleOptions': [],
-          'admin.users.deletePreview': preview,
-          'admin.users.permanentlyDelete': { id: '22222222-2222-4222-8222-222222222222' },
+    renderPage(<UsersPage />, {
+      path: '/settings/users',
+      auth: signedIn(),
+      calls,
+      responses: {
+        'admin.users.list': users,
+        'admin.users.roleOptions': [],
+        'admin.users.permanentlyDelete': {
+          id: '22222222-2222-4222-8222-222222222222',
+          leadsUnassigned: 4,
+          ticketsUnassigned: 0,
         },
-      });
-      const table = await screen.findByRole('table', { name: 'Users' });
-      fireEvent.keyDown(within(table).getByRole('button', { name: 'Actions for Simon' }), {
-        key: 'Enter',
-      });
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-      return screen.findByRole('dialog', { name: 'Permanently delete Simon?' });
-    };
-
-    let dialog = await open({ links: [{ label: 'leads owned', n: 4 }] });
-    expect(await within(dialog).findByText('4 leads owned')).toBeDefined();
-    expect(within(dialog).getByText(/This is permanent and cannot be undone/)).toBeDefined();
-    const blocked = within(dialog).getByRole('button', { name: 'Delete permanently' });
-    expect((blocked as HTMLButtonElement).disabled).toBe(true);
-
-    dialog = await open({ links: [] });
-    expect(await within(dialog).findByText(/They have no records in the CRM/)).toBeDefined();
+      },
+    });
+    const table = await screen.findByRole('table', { name: 'Users' });
+    fireEvent.keyDown(within(table).getByRole('button', { name: 'Actions for Simon' }), {
+      key: 'Enter',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Permanently delete Simon?' });
+    expect(
+      within(dialog).getByText(
+        "This user's open leads will become Unassigned. Their name will remain in old history notes. This action is permanent.",
+      ),
+    ).toBeDefined();
+    expect(calls.some((c) => c.path === 'admin.users.deletePreview')).toBe(false);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }));
     await waitFor(() => {
       expect(calls.find((c) => c.path === 'admin.users.permanentlyDelete')?.input).toEqual({
         id: '22222222-2222-4222-8222-222222222222',
+      });
+    });
+    await waitFor(() => {
+      expect(getToasts().at(-1)).toMatchObject({
+        title: 'Simon was permanently deleted',
+        description: '4 open leads are now Unassigned.',
       });
     });
   });

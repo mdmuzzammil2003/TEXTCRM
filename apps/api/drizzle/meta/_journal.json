@@ -190,6 +190,13 @@
       "when": 1794782861095,
       "tag": "0026_add_pending_installation_status",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794788524292,
+      "tag": "0027_user_delete_name_snapshots",
+      "breakpoints": true
     }
   ]
 }

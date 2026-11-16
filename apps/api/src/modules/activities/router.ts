@@ -98,7 +98,8 @@ export const activitiesRouter = router({
       assignedUserId: activity.assignedUserId,
       assigneeName,
       authorUserId: activity.authorUserId,
-      authorName,
+      // A deleted user's name was saved on the entry.
+      authorName: authorName ?? activity.authorNameSnapshot,
       source:
         activity.entityType === input.entityType && activity.entityId === input.entityId
           ? null

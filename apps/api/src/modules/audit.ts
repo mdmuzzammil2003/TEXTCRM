@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { RequestMeta } from '../auth/users-repo.ts';
 import type { Db, Tx } from '../db/client.ts';
 import { auditLog, users } from '../db/schema/index.ts';
@@ -77,7 +77,8 @@ export async function entityHistory(db: Db, entityType: string, entityId: string
       action: auditLog.action,
       changes: auditLog.changes,
       actorType: auditLog.actorType,
-      actorName: users.name,
+      // A deleted user's name was saved on the entry.
+      actorName: sql<string | null>`coalesce(${users.name}, ${auditLog.actorNameSnapshot})`,
     })
     .from(auditLog)
     .leftJoin(users, eq(users.id, auditLog.actorUserId))

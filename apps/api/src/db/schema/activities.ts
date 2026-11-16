@@ -52,6 +52,8 @@ export const activities = pgTable(
     /** System activities: structured detail, e.g. { from: 'New', to: 'Contacted' }. */
     metadata: jsonb().$type<Record<string, unknown>>(),
     authorUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    /** The author's name, saved when their user is permanently deleted (author_user_id → null). */
+    authorNameSnapshot: text(),
     deletedAt: tstz(),
     ...timestamps,
   },

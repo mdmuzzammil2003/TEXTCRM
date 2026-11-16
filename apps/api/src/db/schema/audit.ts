@@ -23,6 +23,8 @@ export const auditLog = pgTable(
     occurredAt: tstz().notNull().defaultNow(),
     actorType: auditActorType().notNull(),
     actorUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    /** The actor's name, saved when their user is permanently deleted (actor_user_id → null). */
+    actorNameSnapshot: text(),
     /** e.g. 'create', 'update', 'delete', 'sign_in', 'convert_to_project'. */
     action: text().notNull(),
     /** Table-style name, e.g. 'lead', 'project'. */

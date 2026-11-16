@@ -240,11 +240,6 @@ export function UsersPage() {
   const [purging, setPurging] = useState<User | null>(null);
   const isAdmin = useIsAdmin();
   const purge = useMutation(trpc.admin.users.permanentlyDelete.mutationOptions());
-  const links = useQuery({
-    ...trpc.admin.users.deletePreview.queryOptions({ id: purging?.id ?? '' }),
-    enabled: purging !== null,
-  });
-  const linked = (links.data?.links.length ?? 0) > 0;
   const preview = useQuery({
     ...trpc.admin.users.deactivationPreview.queryOptions({ id: deactivating?.id ?? '' }),
     enabled: deactivating !== null,
@@ -478,37 +473,27 @@ export function UsersPage() {
           if (!open) setPurging(null);
         }}
         title={`Permanently delete ${purging?.name ?? ''}?`}
-        description="This is permanent and cannot be undone. Their sign-in access is removed for good."
+        description="This user's open leads will become Unassigned. Their name will remain in old history notes. This action is permanent."
         confirmLabel="Delete permanently"
         destructive
-        confirmDisabled={!links.data || linked}
         onConfirm={async () => {
           if (!purging) return;
-          await purge.mutateAsync({ id: purging.id });
-          await queryClient.invalidateQueries(trpc.admin.users.pathFilter());
-          toast({ title: `${purging.name} was permanently deleted`, tone: 'success' });
+          const result = await purge.mutateAsync({ id: purging.id });
+          await Promise.all([
+            queryClient.invalidateQueries(trpc.admin.users.pathFilter()),
+            queryClient.invalidateQueries(trpc.leads.pathFilter()),
+          ]);
+          const moved = [
+            result.leadsUnassigned && `${String(result.leadsUnassigned)} open leads`,
+            result.ticketsUnassigned && `${String(result.ticketsUnassigned)} open tickets`,
+          ].filter(Boolean);
+          toast({
+            title: `${purging.name} was permanently deleted`,
+            description: moved.length ? `${moved.join(' and ')} are now Unassigned.` : undefined,
+            tone: 'success',
+          });
         }}
-      >
-        {links.isPending ? (
-          <p className="text-sm text-fg-muted">Checking their records…</p>
-        ) : linked ? (
-          <Alert tone="warning">
-            This user has linked records and cannot be deleted. Deactivate them instead.
-            <ul className="mt-1 list-disc pl-5">
-              {links.data?.links.map((link) => (
-                <li key={link.label}>
-                  {link.n} {link.label}
-                </li>
-              ))}
-            </ul>
-          </Alert>
-        ) : (
-          <p className="text-sm text-fg-muted">
-            They have no records in the CRM. Their email drafts, signature and saved views are
-            deleted with them.
-          </p>
-        )}
-      </ConfirmDialog>
+      />
     </div>
   );
 }
