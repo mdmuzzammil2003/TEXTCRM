@@ -96,6 +96,70 @@ describe('LeadsPage', () => {
   });
 });
 
+describe('LeadsPage: the Deleted filter', () => {
+  afterEach(cleanup);
+  const deletedResponses = {
+    ...responses,
+    'leads.list': {
+      total: 1,
+      rows: [{ ...lead, deletedAt: new Date().toISOString() }],
+    },
+    'leads.bulkRestore': { updated: 1, skipped: [] },
+    'leads.bulkPermanentlyDelete': { updated: 1, skipped: [] },
+  };
+  const selectFirst = async () => {
+    const table = await screen.findByRole('table');
+    const [first] = await within(table).findAllByRole('checkbox', { name: 'Select row' });
+    if (first) fireEvent.click(first);
+  };
+
+  it('restores or (Admin) permanently deletes the selected leads, after the sheet warning', async () => {
+    const calls: TrpcCall[] = [];
+    renderPage(<LeadsPage />, {
+      path: '/leads',
+      url: '/leads?deleted=true',
+      auth: signedIn(),
+      responses: deletedResponses,
+      calls,
+    });
+    await selectFirst();
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore Selected' }));
+    await waitFor(() => {
+      expect(calls.find((c) => c.path === 'leads.bulkRestore')?.input).toEqual({ ids: [lead.id] });
+    });
+
+    await selectFirst();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Permanently' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Permanently delete 1 lead?' });
+    expect(
+      within(dialog).getByText(
+        'Make sure you have deleted these rows from your Google Sheet. Otherwise, the live sync will create them again.',
+      ),
+    ).toBeDefined();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }));
+    await waitFor(() => {
+      expect(calls.find((c) => c.path === 'leads.bulkPermanentlyDelete')?.input).toEqual({
+        ids: [lead.id],
+      });
+    });
+  });
+
+  it('only an Admin sees Delete Permanently', async () => {
+    renderPage(<LeadsPage />, {
+      path: '/leads',
+      url: '/leads?deleted=true',
+      auth: fakeAuth({
+        status: 'signedIn',
+        profile: { ...fullAccessProfile(), role: { key: 'manager', name: 'Manager' } },
+      }),
+      responses: deletedResponses,
+    });
+    await selectFirst();
+    expect(await screen.findByRole('button', { name: 'Restore Selected' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Delete Permanently' })).toBeNull();
+  });
+});
+
 describe('LeadFormDrawer', () => {
   afterEach(cleanup);
 

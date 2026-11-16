@@ -291,6 +291,43 @@ describe('leads', () => {
       expect(await db.select().from(leads).where(eq(leads.id, id))).toHaveLength(1);
     });
 
+    it('bulk: restores several deleted leads, and an Admin deletes several for good (converted ones skipped)', async () => {
+      const admin = asRole(micky, 'admin');
+      const ids: string[] = [];
+      for (const [i, name] of ['Ava', 'Ben', 'Cal'].entries()) {
+        const { id } = await admin.leads.create({
+          values: {
+            ...olivia,
+            firstName: name,
+            email: `${name}@example.com`,
+            mobile: undefined,
+            leadRef: String(8000 + i),
+          },
+        });
+        ids.push(id);
+      }
+      const [ava, ben, cal] = ids as [string, string, string];
+      await admin.projects.convertLead({ leadId: cal });
+      await admin.leads.bulkDelete({ ids: [ava, ben] });
+
+      expect(await admin.leads.bulkRestore({ ids: [ava] })).toEqual({ updated: 1, skipped: [] });
+      expect((await admin.leads.get({ id: ava })).deletedAt).toBeNull();
+
+      await expect(
+        asRole(simon, 'manager').leads.bulkPermanentlyDelete({ ids: [ben] }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      const result = await admin.leads.bulkPermanentlyDelete({ ids: [ava, ben, cal] });
+      expect(result.updated).toBe(2);
+      expect(result.skipped).toEqual([
+        {
+          id: cal,
+          reason:
+            'This lead is linked to a project and cannot be deleted. Delete the project first or keep the lead.',
+        },
+      ]);
+      expect((await db.select({ id: leads.id }).from(leads)).map((l) => l.id)).toEqual([cal]);
+    });
+
     it('a lead that became a project is refused', async () => {
       const admin = asRole(micky, 'admin');
       const { id } = await admin.leads.create({ values: { ...olivia, leadRef: '7002' } });

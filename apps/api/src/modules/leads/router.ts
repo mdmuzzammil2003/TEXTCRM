@@ -396,6 +396,65 @@ async function bulk(
   return { updated, skipped };
 }
 
+function assertAdmin(user: { role: { key: string } }) {
+  if (user.role.key !== 'admin') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Only Admin can permanently delete leads.' });
+  }
+}
+
+/**
+ * Deletes one lead for good (see permanentlyDelete). Returns its stored files' keys, to remove
+ * after the transaction commits.
+ */
+async function purgeLead(
+  tx: Tx,
+  ctx: { user: { id: string }; meta: Actor['meta'] },
+  id: string,
+): Promise<string[]> {
+  // Locked, so nobody converts it while it's being deleted.
+  const [lead] = await tx.select().from(leads).where(eq(leads.id, id)).for('update');
+  if (!lead) throw notFound();
+  const [project] = await tx
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.leadId, lead.id))
+    .limit(1);
+  if (project || lead.convertedAt || lead.status === LEAD_CONVERTED) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        'This lead is linked to a project and cannot be deleted. Delete the project first or keep the lead.',
+    });
+  }
+  const keys = await purgeRecords(tx, { projectIds: [], leadIds: [lead.id] });
+  await recordAudit(tx, actorOf(ctx), {
+    action: 'purge',
+    entityType: 'lead',
+    entityId: lead.id,
+    before: {
+      leadRef: lead.leadRef,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      email: lead.email,
+      mobile: lead.mobile,
+      suburb: lead.suburb,
+      status: lead.status,
+    },
+  });
+  return keys;
+}
+
+async function removeLeadFiles(
+  ctx: {
+    storage: Parameters<typeof removeStoredFiles>[0];
+    log: { warn: (o: object, m: string) => void };
+  },
+  keys: string[],
+) {
+  const left = await removeStoredFiles(ctx.storage, keys);
+  if (left.length) ctx.log.warn({ keys: left }, 'Stored files of deleted leads were not removed');
+}
+
 export const leadsRouter = router({
   ...leadDetailProcedures,
   list: permissionProcedure('leads', 'view')
@@ -676,53 +735,35 @@ export const leadsRouter = router({
   permanentlyDelete: protectedProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.user.role.key !== 'admin') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Only Admin can permanently delete leads.',
-        });
-      }
-      const storageKeys = await ctx.db.transaction(async (tx) => {
-        // Locked, so nobody converts it while it's being deleted.
-        const [lead] = await tx.select().from(leads).where(eq(leads.id, input.id)).for('update');
-        if (!lead) throw notFound();
-        const [project] = await tx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(eq(projects.leadId, lead.id))
-          .limit(1);
-        if (project || lead.convertedAt || lead.status === LEAD_CONVERTED) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message:
-              'This lead is linked to a project and cannot be deleted. Delete the project first or keep the lead.',
-          });
-        }
-        const keys = await purgeRecords(tx, { projectIds: [], leadIds: [lead.id] });
-        await recordAudit(tx, actorOf(ctx), {
-          action: 'purge',
-          entityType: 'lead',
-          entityId: lead.id,
-          before: {
-            leadRef: lead.leadRef,
-            firstName: lead.firstName,
-            lastName: lead.lastName,
-            email: lead.email,
-            mobile: lead.mobile,
-            suburb: lead.suburb,
-            status: lead.status,
-          },
-        });
-        return keys;
-      });
-      const filesLeft = await removeStoredFiles(ctx.storage, storageKeys);
-      if (filesLeft.length) {
-        ctx.log.warn(
-          { leadId: input.id, keys: filesLeft },
-          'Stored files of a deleted lead were not removed',
-        );
-      }
+      assertAdmin(ctx.user);
+      const storageKeys = await ctx.db.transaction((tx) => purgeLead(tx, ctx, input.id));
+      await removeLeadFiles(ctx, storageKeys);
       return { id: input.id };
+    }),
+
+  /**
+   * Admin only: permanently deletes several leads (the Deleted filter's bulk action). Each lead
+   * is its own transaction; ones the rules refuse (became a project, gone) are skipped and
+   * reported, the rest are deleted.
+   */
+  bulkPermanentlyDelete: protectedProcedure
+    .input(z.object({ ids: leadIdsSchema }))
+    .mutation(async ({ ctx, input }) => {
+      assertAdmin(ctx.user);
+      let updated = 0;
+      const skipped: { id: string; reason: string }[] = [];
+      const storageKeys: string[] = [];
+      for (const id of input.ids) {
+        try {
+          storageKeys.push(...(await ctx.db.transaction((tx) => purgeLead(tx, ctx, id))));
+          updated += 1;
+        } catch (error) {
+          if (!(error instanceof TRPCError) || error.code === 'INTERNAL_SERVER_ERROR') throw error;
+          skipped.push({ id, reason: error.message });
+        }
+      }
+      await removeLeadFiles(ctx, storageKeys);
+      return { updated, skipped };
     }),
 
   restore: permissionProcedure('leads', 'delete')
@@ -750,5 +791,12 @@ export const leadsRouter = router({
     .input(z.object({ ids: leadIdsSchema }))
     .mutation(({ ctx, input }) =>
       bulk(ctx.db, input.ids, (tx, id) => setDeleted(tx, ctx, id, true)),
+    ),
+
+  /** Restores several deleted leads (the Deleted filter's bulk action). */
+  bulkRestore: permissionProcedure('leads', 'delete')
+    .input(z.object({ ids: leadIdsSchema }))
+    .mutation(({ ctx, input }) =>
+      bulk(ctx.db, input.ids, (tx, id) => setDeleted(tx, ctx, id, false)),
     ),
 });

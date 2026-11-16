@@ -1,10 +1,10 @@
 import { LEAD_CONVERTED } from '@mms/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Trash2, UserPlus } from 'lucide-react';
+import { ArchiveRestore, ChevronDown, Trash2, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx';
 import { errorMessage } from '../../lib/errors.ts';
-import { useCan, useOptions, useUsers } from '../../lib/hooks.ts';
+import { useCan, useIsAdmin, useOptions, useUsers } from '../../lib/hooks.ts';
 import { useTRPC } from '../../lib/trpc.ts';
 import {
   Button,
@@ -144,6 +144,89 @@ export function BulkActions({ ids, onDone }: { ids: string[]; onDone: () => void
           await report('deleted', await remove.mutateAsync({ ids }));
         }}
       />
+    </>
+  );
+}
+
+/**
+ * The Deleted filter's actions on the selected leads: restore them, or (Admin only) delete them
+ * for good. Leads the rules refuse (e.g. one that became a project) are skipped and reported.
+ */
+export function DeletedBulkActions({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const can = useCan();
+  const isAdmin = useIsAdmin();
+  const restore = useMutation(trpc.leads.bulkRestore.mutationOptions());
+  const purge = useMutation(trpc.leads.bulkPermanentlyDelete.mutationOptions());
+  const [confirmingPurge, setConfirmingPurge] = useState(false);
+  const count = `${String(ids.length)} lead${ids.length === 1 ? '' : 's'}`;
+
+  const report = async (verb: string, result: Result) => {
+    await queryClient.invalidateQueries(trpc.leads.pathFilter());
+    const plural = (n: number) => `${String(n)} lead${n === 1 ? '' : 's'}`;
+    toast({
+      title: `${plural(result.updated)} ${verb}`,
+      description: result.skipped.length
+        ? `${plural(result.skipped.length)} skipped: ${result.skipped[0]?.reason ?? ''}`
+        : undefined,
+      tone: result.skipped.length ? 'neutral' : 'success',
+    });
+    onDone();
+  };
+
+  return (
+    <>
+      {can('leads', 'delete') && (
+        <Button
+          size="sm"
+          loading={restore.isPending}
+          onClick={() => {
+            restore
+              .mutateAsync({ ids })
+              .then((result) => report('restored', result))
+              .catch((error: unknown) => {
+                toast({
+                  title: 'Nothing was changed',
+                  description: errorMessage(error),
+                  tone: 'danger',
+                });
+              });
+          }}
+        >
+          <ArchiveRestore />
+          Restore Selected
+        </Button>
+      )}
+      {isAdmin && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-danger-text"
+          onClick={() => {
+            setConfirmingPurge(true);
+          }}
+        >
+          <Trash2 />
+          Delete Permanently
+        </Button>
+      )}
+      <ConfirmDialog
+        open={confirmingPurge}
+        onOpenChange={setConfirmingPurge}
+        title={`Permanently delete ${count}?`}
+        description="Make sure you have deleted these rows from your Google Sheet. Otherwise, the live sync will create them again."
+        confirmLabel="Delete permanently"
+        destructive
+        onConfirm={async () => {
+          await report('permanently deleted', await purge.mutateAsync({ ids }));
+        }}
+      >
+        <p className="text-sm text-fg-muted">
+          This is permanent and cannot be undone. Their timeline, notes, tasks and files are deleted
+          too; leads that became a project are skipped.
+        </p>
+      </ConfirmDialog>
     </>
   );
 }

@@ -28,7 +28,7 @@ import {
   type SortingState,
 } from '../../ui/index.ts';
 import { leadsSearchSchema, type LeadsSearch } from '../list-search.ts';
-import { BulkActions } from './BulkActions.tsx';
+import { BulkActions, DeletedBulkActions } from './BulkActions.tsx';
 import { LeadFormDrawer } from './LeadFormDrawer.tsx';
 import { LEAD_STATUSES, startOfWeek, statusTone } from './lead-status.ts';
 
@@ -370,7 +370,14 @@ export function LeadsPage() {
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         selectionActions={
-          !filters.deleted && (
+          filters.deleted ? (
+            <DeletedBulkActions
+              ids={selectedIds}
+              onDone={() => {
+                setRowSelection({});
+              }}
+            />
+          ) : (
             <BulkActions
               ids={selectedIds}
               onDone={() => {
